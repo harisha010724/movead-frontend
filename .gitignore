@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+
+.env
+.env.local
+.env.*.local
+
+# Pulled from the backend by `npm run api:pull`; the generated types are committed.
+openapi.json
+
+*.log
+npm-debug.log*
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
