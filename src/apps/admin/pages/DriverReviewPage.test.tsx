@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/shared/api/client';
-import type { AdminDriverDetail, DocumentChecklistItem } from '@/shared/types/domain';
+import type { AdminDriverDetail, AdminVehicle, DocumentChecklistItem } from '@/shared/types/domain';
 import DriverReviewPage from './DriverReviewPage';
 
 vi.mock('@/shared/api/client', () => ({
@@ -40,6 +40,26 @@ function documentWith(overrides: Partial<DocumentChecklistItem> = {}): DocumentC
   };
 }
 
+function vehicleWith(overrides: Partial<AdminVehicle> = {}): AdminVehicle {
+  return {
+    id: 'veh_1',
+    driverId: 'drv_1',
+    registrationNumber: 'KA01AB1234',
+    category: 'AUTO',
+    bodyType: null,
+    makeModel: 'Bajaj RE',
+    colour: null,
+    manufactureYear: null,
+    fuelType: null,
+    imageKey: null,
+    imageUrl: null,
+    status: 'PENDING',
+    rejectionReason: null,
+    suspendedReason: null,
+    ...overrides,
+  };
+}
+
 function detailWith(overrides: Partial<AdminDriverDetail> = {}): AdminDriverDetail {
   return {
     driver: {
@@ -54,24 +74,7 @@ function detailWith(overrides: Partial<AdminDriverDetail> = {}): AdminDriverDeta
       city: 'Bengaluru',
       location: { city: 'Bengaluru', label: 'Vijayanagar, Bengaluru', lat: 12.9, lng: 77.5 },
     },
-    vehicles: [
-      {
-        id: 'veh_1',
-        driverId: 'drv_1',
-        registrationNumber: 'KA01AB1234',
-        category: 'AUTO',
-        bodyType: null,
-        makeModel: 'Bajaj RE',
-        colour: null,
-        manufactureYear: null,
-        fuelType: null,
-        imageKey: null,
-        imageUrl: null,
-        status: 'PENDING',
-        rejectionReason: null,
-        suspendedReason: null,
-      },
-    ],
+    vehicles: [vehicleWith()],
     driverDocuments: [documentWith()],
     vehicleDocuments: {
       veh_1: [documentWith({ kind: 'RC', documentId: 'doc_rc', expiresOn: null })],
@@ -140,14 +143,13 @@ describe('what the reviewer is shown', () => {
     get.mockResolvedValue(
       detailWith({
         vehicles: [
-          {
-            ...detailWith().vehicles[0],
+          vehicleWith({
             colour: 'White',
             manufactureYear: 2021,
             fuelType: 'CNG',
             imageKey: 'drv_1/vehicle-1.jpg',
             imageUrl: '/v1/admin/vehicles/veh_1/photo',
-          },
+          }),
         ],
       }),
     );
@@ -168,7 +170,7 @@ describe('what the reviewer is shown', () => {
   it('says the vehicle has not been described rather than drawing empty rows', async () => {
     get.mockResolvedValue(
       detailWith({
-        vehicles: [{ ...detailWith().vehicles[0], makeModel: null }],
+        vehicles: [vehicleWith({ makeModel: null })],
       }),
     );
     renderPage();

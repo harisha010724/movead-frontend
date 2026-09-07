@@ -24,6 +24,8 @@ import {
   minCampaignEndDate,
   zoneBudgetTotal,
   type AdminCampaignFormValues,
+  type CampaignLocation,
+  type ZonePolygons,
 } from '@/shared/schemas/campaign';
 
 const CITIES = [{ value: 'Bengaluru', label: 'Bengaluru' }];
@@ -114,6 +116,11 @@ function CampaignForm({
     },
   });
 
+  /*
+   * `useWatch` types every field as deep-partial. `defaultValues` above seeds
+   * all of them and only `setValue` writes the map fields, so where a whole
+   * location or polygon is handed on it is asserted back to its real shape.
+   */
   const values = useWatch({ control });
   const selected = advertisers.find((a) => a.id === values.advertiserId);
 
@@ -314,8 +321,8 @@ function CampaignForm({
         <AdLocationsCard
           city={values.city || 'Bengaluru'}
           vehicleType={values.vehicleType ?? 'CAB'}
-          locations={values.locations ?? []}
-          polygons={values.zonePolygons}
+          locations={(values.locations ?? []) as CampaignLocation[]}
+          polygons={values.zonePolygons as ZonePolygons | undefined}
           onLocationsChange={(next) =>
             setValue('locations', next, { shouldValidate: true, shouldTouch: true })
           }

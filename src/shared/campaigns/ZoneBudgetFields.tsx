@@ -1,12 +1,11 @@
-import type { FieldErrors, UseFormRegister } from 'react-hook-form';
+import type { FieldErrors, Path, UseFormRegister } from 'react-hook-form';
 import { TextField } from '@/shared/ui/form';
-import { formatINR, formatKm } from '@/shared/format';
+import { formatINR } from '@/shared/format';
 import {
   ZONE_PLAN_FIELDS,
   ZONE_RATES,
   rupeeValue,
   zoneBudgetTotal,
-  type ZoneFieldKey,
 } from '@/shared/schemas/campaign';
 
 interface ZoneBudgetValues {
@@ -27,6 +26,14 @@ export function ZoneBudgetFields<T extends ZoneBudgetValues>({
 }) {
   const total = zoneBudgetTotal(values);
 
+  /*
+   * The constraint guarantees `T` carries both zone fields, but RHF's error and
+   * path types are resolved against the bare type parameter and cannot see
+   * through it. Narrowing to the two keys this component owns is what the
+   * constraint already promises.
+   */
+  const zoneErrors = errors as FieldErrors<ZoneBudgetValues>;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-5 sm:grid-cols-2">
@@ -43,8 +50,8 @@ export function ZoneBudgetFields<T extends ZoneBudgetValues>({
                   ? `${formatINR((km * zone.rate).toFixed(2))} at ₹${String(zone.rate)}/km`
                   : `Target kilometres. ₹${String(zone.rate)} per verified km.`
               }
-              error={errors[zone.key as ZoneFieldKey]?.message}
-              {...register(zone.key)}
+              error={zoneErrors[zone.key]?.message}
+              {...register(zone.key as Path<T>)}
             />
           );
         })}

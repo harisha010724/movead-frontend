@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/shared/api/client';
-import type { AdminCampaign, CampaignStatus } from '@/shared/types/domain';
+import { asMoney, type AdminCampaign, type CampaignStatus } from '@/shared/types/domain';
 import CampaignReviewPage from './CampaignReviewPage';
 
 vi.mock('@/shared/api/client', () => ({
@@ -28,9 +28,9 @@ function campaign(overrides: Partial<AdminCampaign> = {}): AdminCampaign {
     vehicleType: 'CAB',
     startDate: '2026-09-01',
     endDate: '2026-09-30',
-    budget: '200000.00',
-    spent: '0.00',
-    remaining: '200000.00',
+    budget: asMoney('200000.00'),
+    spent: asMoney('0.00'),
+    remaining: asMoney('200000.00'),
     vehicleCount: 12,
     verifiedKm: 0,
     impressions: 0,

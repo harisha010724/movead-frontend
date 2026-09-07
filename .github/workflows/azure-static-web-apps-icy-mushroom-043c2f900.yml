@@ -43,8 +43,15 @@ jobs:
           app_location: "/" # App source code path
           api_location: "" # Api source code path - optional
           output_location: "dist/web" # Built app content directory - optional
+          # Without this Oryx runs `npm run build`, which emits the advertiser and
+          # admin bundles instead of the single-origin one this app serves.
+          app_build_command: "npm run build:web"
           github_id_token: ${{ steps.idtoken.outputs.result }}
           ###### End of Repository/Build Configurations ######
+        env:
+          # Vite inlines VITE_* at build time, so this has to be present here and
+          # not in the Static Web App's own configuration.
+          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'

@@ -29,6 +29,8 @@ import {
   rupeeValue,
   toCampaignFormValues,
   type CampaignFormValues,
+  type CampaignLocation,
+  type ZonePolygons,
 } from '@/shared/schemas/campaign';
 
 interface Estimate {
@@ -121,6 +123,11 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
     defaultValues: campaign ? toCampaignFormValues(campaign) : EMPTY_DRAFT,
   });
 
+  /*
+   * `useWatch` types every field as deep-partial. `defaultValues` above seeds
+   * all of them and only `setValue` writes the map fields, so where a whole
+   * location or polygon is handed on it is asserted back to its real shape.
+   */
   const values = useWatch({ control });
   const preview = previewZoneEstimate(values);
   const hasZoneAmount = rupeeValue(values.zonePrimeKm) + rupeeValue(values.zoneSecondaryKm) > 0;
@@ -326,8 +333,8 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
           <AdLocationsCard
             city={values.city || 'Bengaluru'}
             vehicleType={values.vehicleType ?? 'CAB'}
-            locations={values.locations ?? []}
-            polygons={values.zonePolygons}
+            locations={(values.locations ?? []) as CampaignLocation[]}
+            polygons={values.zonePolygons as ZonePolygons | undefined}
             onLocationsChange={(next) =>
               setValue('locations', next, { shouldValidate: true, shouldTouch: true })
             }
