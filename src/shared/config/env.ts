@@ -58,15 +58,13 @@ export const env = {
   isProduction: appEnv === 'production',
   apiUrl: stripTrailingSlash(required('VITE_API_URL', import.meta.env.VITE_API_URL)),
 
-  /**
-   * Portal URLs, used only where an email or a production split-host deploy
-   * still needs an absolute address. Locally they share one origin:
-   * advertisers at `/`, operations at `/admin`.
+  /*
+   * No portal addresses here. All three products are served from this origin
+   * and reached by path, so every link between them is relative; an absolute
+   * address would only be a second, staler answer to a question the router
+   * already answers. Emails are the one exception, and the server composes
+   * those from its own PORTAL_* settings.
    */
-  advertiserUrl: stripTrailingSlash(
-    required('VITE_ADVERTISER_URL', import.meta.env.VITE_ADVERTISER_URL),
-  ),
-  adminUrl: stripTrailingSlash(required('VITE_ADMIN_URL', import.meta.env.VITE_ADMIN_URL)),
   sentryDsn: import.meta.env.VITE_SENTRY_DSN,
   googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
 

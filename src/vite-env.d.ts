@@ -4,9 +4,6 @@ declare const __PORTAL__: 'advertiser' | 'admin';
 
 interface ImportMetaEnv {
   readonly VITE_API_URL: string;
-  /** Origins of the two portals. Both bundles need both, for the shared login. */
-  readonly VITE_ADVERTISER_URL: string;
-  readonly VITE_ADMIN_URL: string;
   readonly VITE_APP_ENV: 'local' | 'staging' | 'production';
   readonly VITE_SENTRY_DSN?: string;
   readonly VITE_GOOGLE_MAPS_API_KEY?: string;
