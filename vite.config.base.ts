@@ -57,10 +57,16 @@ export function createPortalConfig(portal: PortalName, devPort: number) {
         proxy: {
           // Keeps the browser same-origin in development so httpOnly auth
           // cookies behave exactly as they do in production.
+          //
+          // Forwarded whole, without rewriting `/api` away. The API mounts
+          // `/api/v1` as well as `/v1` precisely so the proxied path does not
+          // have to be edited in flight — and Static Web Apps, which proxies
+          // the same prefix in production, offers no rewrite to match. A
+          // request that arrives at the server differently in the two
+          // environments is a difference that only shows up in production.
           '/api': {
             target: apiTarget,
             changeOrigin: true,
-            rewrite: (path) => path.replace(/^\/api/, ''),
             configure: (proxy) => {
               // Otherwise an API that is simply not running shows up in the
               // browser as a bare 502 with nothing in the terminal.
