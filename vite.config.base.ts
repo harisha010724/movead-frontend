@@ -68,6 +68,29 @@ export function createPortalConfig(portal: PortalName, devPort: number) {
             target: apiTarget,
             changeOrigin: true,
             configure: (proxy) => {
+              /*
+               * Forwarded without an `Origin`, because by this point there is
+               * no cross-origin request left to describe.
+               *
+               * The browser sent one — it attaches `Origin` to same-origin
+               * POSTs as well as cross-origin ones — and it says
+               * `localhost:5173`, which a deployed API's allowlist has no
+               * reason to contain. Passing it on asks that API to rule on a
+               * hop it cannot see, and it answers 403.
+               *
+               * Dropping it makes this what it already is: a server-side call,
+               * like the ones the mobile app makes, which the API permits for
+               * exactly that reason. The browser's own boundary is untouched —
+               * to it the request never left localhost.
+               *
+               * The alternative, adding `localhost:5173` to the deployed
+               * allowlist, would let a page served from that port on anyone's
+               * machine call the production API with their cookies.
+               */
+              proxy.on('proxyReq', (proxyReq) => {
+                proxyReq.removeHeader('origin');
+              });
+
               // Otherwise an API that is simply not running shows up in the
               // browser as a bare 502 with nothing in the terminal.
               proxy.on('error', (error: Error) => {
