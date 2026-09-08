@@ -15,7 +15,7 @@ import { AuthLayout } from './AuthLayout';
 import { GoogleMark } from './GoogleMark';
 import { isHomePortal, portalLabel, portalPath, type Portal } from './portals';
 import type { AuthUserPayload } from './authContext';
-import { cacheSessionUser, type LoginResponse } from './session';
+import { beginSession, type LoginResponse } from './session';
 import { EnrolAuthenticator } from './EnrolAuthenticator';
 import {
   credentialsSchema,
@@ -77,7 +77,7 @@ export function LoginPage() {
       api.post<LoginResponse>('/v1/auth/login', values),
     onSuccess: async (result) => {
       if (result.status === 'authenticated') {
-        cacheSessionUser(queryClient, result.user);
+        beginSession(queryClient, result);
         setSignedIn(result.user);
         return;
       }
@@ -114,7 +114,7 @@ export function LoginPage() {
       }),
     onSuccess: (result) => {
       if (result.status !== 'authenticated') return;
-      cacheSessionUser(queryClient, result.user);
+      beginSession(queryClient, result);
       setSignedIn(result.user);
     },
     onError: (error) => {

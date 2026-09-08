@@ -2,9 +2,17 @@ import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { toCurrentUser, type AuthUserPayload } from './authContext';
 import { LOGIN_PATH, type Portal } from './portals';
+import { storeSessionToken } from './sessionToken';
+
+export interface AuthenticatedResponse {
+  status: 'authenticated';
+  audience: Portal;
+  user: AuthUserPayload;
+  sessionToken: string;
+}
 
 export type LoginResponse =
-  | { status: 'authenticated'; audience: Portal; user: AuthUserPayload }
+  | AuthenticatedResponse
   | {
       status: 'mfa_required' | 'mfa_enrolment_required';
       audience: Portal;
@@ -12,12 +20,20 @@ export type LoginResponse =
     };
 
 /**
- * Login and MFA already return the user. Write that into the session cache so
- * the UI does not have to call `/v1/auth/me` just to confirm a sign-in that
- * already succeeded.
+ * Everything a successful sign-in has to record, in one call.
+ *
+ * Both doors lead here — password alone, and password then authenticator — and
+ * so does accepting an invitation. Keeping the token and the cached user
+ * together is why: a sign-in that cached the user but dropped the token looks
+ * signed in until the first request, which is the failure this whole path
+ * exists to stop happening.
+ *
+ * The user comes back from login and MFA already, so writing it here saves a
+ * `/v1/auth/me` round trip to confirm a sign-in that just succeeded.
  */
-export function cacheSessionUser(queryClient: QueryClient, payload: AuthUserPayload): void {
-  queryClient.setQueryData(queryKeys.auth.me(payload.audience), toCurrentUser(payload));
+export function beginSession(queryClient: QueryClient, result: AuthenticatedResponse): void {
+  storeSessionToken(result.user.audience, result.sessionToken);
+  queryClient.setQueryData(queryKeys.auth.me(result.user.audience), toCurrentUser(result.user));
 }
 
 /**

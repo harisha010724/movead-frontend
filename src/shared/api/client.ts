@@ -1,4 +1,5 @@
 import { currentWebPortal } from '@/shared/auth/portals';
+import { currentSessionToken } from '@/shared/auth/sessionToken';
 import { env, mockApiEnabled } from '@/shared/config/env';
 import { ApiError, NetworkError } from './errors';
 import { mockFetch } from './mock/mockFetch';
@@ -83,12 +84,26 @@ async function parseError(response: Response): Promise<ApiError> {
   });
 }
 
+/**
+ * The session cookie first, and the token only where the cookie cannot go.
+ *
+ * `credentials: 'include'` still sends the cookie, and the API still prefers
+ * it, so a same-origin deployment authenticates exactly as before and the
+ * header is never needed. It is sent anyway because whether the cookie will
+ * arrive is not knowable from here: the browser decides that, silently, from
+ * how the two hosts relate. Sending both means the request works either way.
+ */
+function authHeaders(): Record<string, string> {
+  const token = currentSessionToken(window.location.pathname);
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function request<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json' };
+  const headers: Record<string, string> = { Accept: 'application/json', ...authHeaders() };
 
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
@@ -96,8 +111,6 @@ async function request<T>(
   const init: RequestInit = {
     method,
     headers,
-    // Auth is an httpOnly, Secure, SameSite cookie. Nothing is read from
-    // localStorage, so an XSS cannot exfiltrate a session token.
     credentials: 'include',
     signal: options.signal,
     ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
@@ -151,7 +164,8 @@ async function uploadForm<T>(
 ): Promise<T> {
   const init: RequestInit = {
     method: 'POST',
-    headers: { Accept: 'application/json' },
+    // No Content-Type: the browser sets it with the multipart boundary.
+    headers: { Accept: 'application/json', ...authHeaders() },
     credentials: 'include',
     body: form,
     signal: options.signal,

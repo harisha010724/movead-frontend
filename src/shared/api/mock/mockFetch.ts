@@ -24,6 +24,13 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const REJECTED_PASSWORD = 'wrong';
 /** The only second factor the mock accepts. */
 const VALID_MFA_CODE = '123456';
+/**
+ * Stands in for the session token the API returns. Nothing here checks it —
+ * the mock tracks sign-in with `session` — but it is returned so the client
+ * stores and sends something, and a request that only works because a header
+ * was missing is caught here rather than in production.
+ */
+const MOCK_SESSION_TOKEN = 'mock-session-token';
 
 /**
  * The mock holds a real session, so signing in and out behaves the way the API
@@ -161,7 +168,7 @@ const handlers: Record<string, Handler> = {
 
     if (audience === 'driver') {
       setDriverSignedIn(true);
-      return json({ status: 'authenticated', audience, user: fx.mockDriverUser });
+      return json({ status: 'authenticated', audience, user: fx.mockDriverUser, sessionToken: MOCK_SESSION_TOKEN });
     }
 
     // Admin TOTP is mandatory (ADM-001); an advertiser's is optional and this
@@ -171,7 +178,7 @@ const handlers: Record<string, Handler> = {
     if (audience !== 'admin' || !env.mockAdminMfa) {
       setSignedIn(true);
       session.awaitingSecondFactor = false;
-      return json({ status: 'authenticated', audience, user: userFor(audience) });
+      return json({ status: 'authenticated', audience, user: userFor(audience), sessionToken: MOCK_SESSION_TOKEN });
     }
 
     session.awaitingSecondFactor = true;
@@ -203,7 +210,7 @@ const handlers: Record<string, Handler> = {
     // The account that presented the password, not the page the code was typed
     // on — the second factor cannot change who is signing in.
     const audience = session.challengeFor;
-    return json({ status: 'authenticated', audience, user: userFor(audience) });
+    return json({ status: 'authenticated', audience, user: userFor(audience), sessionToken: MOCK_SESSION_TOKEN });
   },
 
   'POST /v1/auth/logout': () => {

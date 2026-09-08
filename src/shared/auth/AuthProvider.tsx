@@ -15,6 +15,7 @@ import {
 } from './authContext';
 import { currentWebPortal } from './portals';
 import { isPublicAuthPath } from './session';
+import { clearAllSessionTokens } from './sessionToken';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -41,7 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: () => api.post<void>('/v1/auth/logout'),
+    // `onSettled`, so a sign-out whose request failed still signs you out
+    // locally. A token kept because the server could not be reached is a
+    // browser that looks signed in and cannot be signed out.
     onSettled: () => {
+      clearAllSessionTokens();
       // Clear everything: cached data belongs to the session that just ended.
       queryClient.clear();
     },

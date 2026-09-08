@@ -6,7 +6,7 @@ import { AlertCircle, Car, Check, Mail } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { ApiError, toDisplayMessage } from '@/shared/api/errors';
 import { AuthLayout } from '@/shared/auth/AuthLayout';
-import { cacheSessionUser, type LoginResponse } from '@/shared/auth/session';
+import { beginSession, type LoginResponse } from '@/shared/auth/session';
 import { LOGIN_PATH, portalPath, type Portal } from '@/shared/auth/portals';
 import { useAuth } from '@/shared/auth/useAuth';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
@@ -77,7 +77,7 @@ export default function AcceptInvitationPage() {
       });
 
       if (result.status === 'authenticated') {
-        cacheSessionUser(queryClient, result.user);
+        beginSession(queryClient, result);
       }
     },
   });
