@@ -48,10 +48,19 @@ jobs:
           app_build_command: "npm run build:web"
           github_id_token: ${{ steps.idtoken.outputs.result }}
           ###### End of Repository/Build Configurations ######
-        env:
-          # Vite inlines VITE_* at build time, so this has to be present here and
-          # not in the Static Web App's own configuration.
-          VITE_GOOGLE_MAPS_API_KEY: ${{ secrets.VITE_GOOGLE_MAPS_API_KEY }}
+        # No VITE_* here. They come from `.env.production`, which is committed.
+        #
+        # This used to read VITE_GOOGLE_MAPS_API_KEY from a repository secret,
+        # and that is what kept the map blank: an unset secret interpolates to
+        # an empty string rather than to nothing, and Vite ranks a variable that
+        # is already in the environment above any .env file. So the build
+        # replaced a perfectly good key with "" every time, and the only symptom
+        # was a panel asking for the key that had been set.
+        #
+        # A secret was the wrong instrument regardless. Vite inlines VITE_*
+        # into the bundle, so this key is served to every visitor and cannot be
+        # hidden by where it is stored. What protects it is the HTTP referrer
+        # restriction on the key itself, in Google Cloud.
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
