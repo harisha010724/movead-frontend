@@ -159,6 +159,21 @@
   }
 }
 
+/*
+ * How long the toast has left. Scaled rather than sized so it runs on the
+ * compositor, and driven by an `animation-duration` set per toast from that
+ * toast's own lifetime — a warning lingers longer than a success, and a bar on
+ * a fixed clock would contradict whichever it did not match.
+ */
+@keyframes toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @keyframes route-loop {
   from {
     offset-distance: 0%;
@@ -300,6 +315,24 @@
     animation: toast-out 120ms ease-out;
   }
 
+  .toast-progress {
+    animation: toast-progress linear forwards;
+  }
+
+  /*
+   * Held from the viewport, not the toast under the cursor, because Radix
+   * pauses every timer in the stack at once. Pausing only the hovered bar
+   * would leave the rest draining against a clock that had stopped.
+   *
+   * `data-paused` is the other case Radix stops for — a backgrounded window,
+   * set by Toaster — and focus-within covers reading the stack by keyboard.
+   */
+  .toast-viewport:hover .toast-progress,
+  .toast-viewport:focus-within .toast-progress,
+  .toast-viewport[data-paused] .toast-progress {
+    animation-play-state: paused;
+  }
+
   /* Thin scrollbar for the sidebar and in-card scroll areas. */
   .scroll-slim {
     scrollbar-width: thin;
@@ -389,5 +422,15 @@ body > .pac-container:after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /*
+   * The rule above collapses this one to nothing, which would show an empty
+   * bar from the moment the toast appeared and read as already expired. A
+   * countdown that cannot count is better absent; the toast still closes on
+   * time, and its text never depended on the bar.
+   */
+  .toast-progress {
+    display: none;
   }
 }
