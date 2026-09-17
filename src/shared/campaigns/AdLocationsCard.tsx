@@ -14,6 +14,7 @@ import {
   unavailableReason,
   useVehiclesInZones,
   vehicleNumber,
+  ZONE_CHIP,
   type AvailableVehicle,
   type VehiclesEndpoint,
 } from './vehiclesInZones';
@@ -57,14 +58,15 @@ export function AdLocationsCard({
   vehiclesError?: string;
 }) {
   const ready = hasOutline(polygons);
-  const query = useVehiclesInZones(endpoint, vehicleType, polygons);
+  const query = useVehiclesInZones(endpoint, vehicleType, city, polygons);
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
   const items = useMemo(() => query.data?.items ?? [], [query.data?.items]);
   const selectedSet = new Set(selectedIds);
   const selectable = items.filter((row) => row.availability === 'available');
-  const allSelected = selectable.length > 0 && selectable.every((row) => selectedSet.has(row.id));
+  const allSelected =
+    selectable.length > 0 && selectable.every((row) => selectedSet.has(row.id));
 
   /*
    * Only the admin endpoint returns a name. Deciding this from the data rather
@@ -102,7 +104,9 @@ export function AdLocationsCard({
   }, [onChange, query.data, selectedIds]);
 
   const toggle = (id: string) => {
-    onChange(selectedSet.has(id) ? selectedIds.filter((row) => row !== id) : [...selectedIds, id]);
+    onChange(
+      selectedSet.has(id) ? selectedIds.filter((row) => row !== id) : [...selectedIds, id],
+    );
   };
 
   /*
@@ -121,94 +125,110 @@ export function AdLocationsCard({
       */}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <section className="order-2 min-w-0 lg:order-1">
-            <header className="flex items-baseline justify-between gap-3 pb-2">
-              <h3 className="text-[13px] font-semibold text-slate-900">Vehicles in these zones</h3>
-              {selectable.length > 0 ? (
-                <button
-                  type="button"
-                  className="text-[12px] font-medium text-slate-600 hover:text-slate-900"
-                  onClick={() => {
-                    onChange(allSelected ? [] : selectable.map((row) => row.id));
-                  }}
-                >
-                  {allSelected ? 'Clear all' : 'Select all available'}
-                </button>
-              ) : null}
-            </header>
+          <header className="flex items-baseline justify-between gap-3 pb-2">
+            <h3 className="text-[13px] font-semibold text-slate-900">
+              Vehicles in these zones
+            </h3>
+            {selectable.length > 0 ? (
+              <button
+                type="button"
+                className="text-[12px] font-medium text-slate-600 hover:text-slate-900"
+                onClick={() => {
+                  onChange(allSelected ? [] : selectable.map((row) => row.id));
+                }}
+              >
+                {allSelected ? 'Clear all' : 'Select all available'}
+              </button>
+            ) : null}
+          </header>
 
-            {!ready ? (
-              <p className="rounded-xl bg-slate-50 px-4 py-6 text-[13px] text-slate-500">
-                Draw a Prime or Secondary outline and the vehicles inside it are listed here.
+          {!city ? (
+            <p className="rounded-xl bg-slate-50 px-4 py-6 text-[13px] text-slate-500">
+              Choose a city and the vehicles based there are listed here.
+            </p>
+          ) : query.isPending ? (
+            <p className="rounded-xl bg-slate-50 px-4 py-6 text-[13px] text-slate-500">
+              Looking up vehicles in {city}…
+            </p>
+          ) : query.isError ? (
+            <p className="rounded-xl bg-rose-50 px-4 py-6 text-[13px] text-rose-700">
+              Could not load vehicles for {city}.
+            </p>
+          ) : items.length === 0 ? (
+            <div className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-4">
+              <Car className="mt-0.5 size-4 shrink-0 text-slate-400" aria-hidden />
+              <p className="text-[13px] text-slate-600">
+                No {kindLabel(vehicleType).toLowerCase()}s are onboarded in {city} yet. Ask
+                operations to onboard drivers here, or choose another vehicle type.
               </p>
-            ) : query.isPending ? (
-              <p className="rounded-xl bg-slate-50 px-4 py-6 text-[13px] text-slate-500">
-                Looking up vehicles in these outlines…
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-[12px] text-slate-500">
+                {query.data?.availableCount ?? 0} available
+                <span className="text-slate-300"> · </span>
+                {query.data?.primeCount ?? 0} Prime
+                <span className="text-slate-300"> · </span>
+                {query.data?.secondaryCount ?? 0} Secondary
+                <span className="text-slate-300"> · </span>
+                {query.data?.networkCount ?? 0} Network
+                <span className="text-slate-300"> · </span>
+                <span className="font-medium text-slate-700">
+                  {selectedIds.length} selected
+                </span>
               </p>
-            ) : query.isError ? (
-              <p className="rounded-xl bg-rose-50 px-4 py-6 text-[13px] text-rose-700">
-                Could not load vehicles for these zones.
-              </p>
-            ) : items.length === 0 ? (
-              <div className="flex items-start gap-3 rounded-xl bg-slate-50 px-4 py-4">
-                <Car className="mt-0.5 size-4 shrink-0 text-slate-400" aria-hidden />
-                <p className="text-[13px] text-slate-600">
-                  No vehicles have an operating pin inside this outline yet. Widen it, or ask
-                  operations to onboard drivers in this area.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
+
+              {/*
+                  Said once, here, rather than on every Network row. Without it
+                  a buyer reads the grey chip as a problem with the vehicle
+                  instead of as the rate it will bill at.
+                */}
+              {!ready ? (
                 <p className="text-[12px] text-slate-500">
-                  {query.data?.availableCount ?? 0} available
-                  <span className="text-slate-300"> · </span>
-                  {query.data?.primeCount ?? 0} Prime
-                  <span className="text-slate-300"> · </span>
-                  {query.data?.secondaryCount ?? 0} Secondary
-                  <span className="text-slate-300"> · </span>
-                  <span className="font-medium text-slate-700">
-                    {selectedIds.length} selected
-                  </span>
+                  Nothing drawn yet, so every vehicle bills at the Network rate of ₹1/km. Draw
+                  an outline to move the ones inside it to Prime or Secondary.
                 </p>
+              ) : null}
 
-                <ul className="max-h-[calc(80vh-11rem)] space-y-2 overflow-y-auto pr-1">
-                  {items.map((row) => (
-                    <VehicleRow
-                      key={row.id}
-                      row={row}
-                      checked={selectedSet.has(row.id)}
-                      focused={focusedId === row.id}
-                      showsDriver={showsDriver}
-                      onToggle={() => toggle(row.id)}
-                      onLocate={() => setFocusedId(row.id)}
-                    />
-                  ))}
-                </ul>
+              <ul className="max-h-[calc(80vh-11rem)] space-y-2 overflow-y-auto pr-1">
+                {items.map((row) => (
+                  <VehicleRow
+                    key={row.id}
+                    row={row}
+                    checked={selectedSet.has(row.id)}
+                    focused={focusedId === row.id}
+                    showsDriver={showsDriver}
+                    onToggle={() => toggle(row.id)}
+                    onLocate={() => setFocusedId(row.id)}
+                  />
+                ))}
+              </ul>
 
-                {selectable.length === 0 ? (
-                  <p className="text-[12px] text-slate-500">
-                    None of these can be ordered yet — they are booked or still in review.
-                  </p>
-                ) : null}
-              </div>
-            )}
+              {selectable.length === 0 ? (
+                <p className="text-[12px] text-slate-500">
+                  None of these can be ordered yet — they are booked or still in review.
+                </p>
+              ) : null}
+            </div>
+          )}
 
-        {vehiclesError ? <FormError message={vehiclesError} className="mt-3" /> : null}
-      </section>
+          {vehiclesError ? <FormError message={vehiclesError} className="mt-3" /> : null}
+        </section>
 
-      <div className="order-1 min-w-0 lg:order-2">
-        <ZoneMapEditor
-          city={city}
-          locations={locations}
-          polygons={polygons ?? {}}
-          onLocationsChange={onLocationsChange}
-          onPolygonsChange={onPolygonsChange}
-          vehicles={pins}
-          selectedVehicleId={focusedId}
-          onVehicleSelect={setFocusedId}
-          mapClassName="h-[calc(80vh-13rem)] min-h-[24rem]"
-          {...(locationsError ? { error: locationsError } : {})}
-        />
-      </div>
+        <div className="order-1 min-w-0 lg:order-2">
+          <ZoneMapEditor
+            city={city}
+            locations={locations}
+            polygons={polygons ?? {}}
+            onLocationsChange={onLocationsChange}
+            onPolygonsChange={onPolygonsChange}
+            vehicles={pins}
+            selectedVehicleId={focusedId}
+            onVehicleSelect={setFocusedId}
+            mapClassName="h-[calc(80vh-13rem)] min-h-[24rem]"
+            {...(locationsError ? { error: locationsError } : {})}
+          />
+        </div>
       </div>
     </>
   );
@@ -227,7 +247,7 @@ export function AdLocationsCard({
               ready={ready}
               matched={items.length}
               selected={selectedIds.length}
-              loading={query.isPending && ready}
+              loading={query.isPending}
             />
             <Button
               type="button"
@@ -248,7 +268,7 @@ export function AdLocationsCard({
         open={expanded}
         onOpenChange={setExpanded}
         title="Ad locations"
-        description="Draw Prime and Secondary outlines on the map. Vehicles whose usual area falls inside them are listed on the left as you draw."
+        description="Pick the vehicles to carry the ad on the left. Outlines drawn on the map set what each one costs per kilometre — Prime ₹5, Secondary ₹2, everywhere else Network ₹1."
         size="xl"
         footer={
           <Button type="button" onClick={() => setExpanded(false)}>
@@ -282,12 +302,26 @@ function ZoneSummary({
   selected: number;
   loading: boolean;
 }) {
+  /*
+   * The rates lead even while the fleet is still loading. Undrawn is a pricing
+   * state, not a missing one — the vehicles are listed either way — so the
+   * sentence a buyer needs here is what it will cost, and the count below is
+   * the detail.
+   */
   if (!ready) {
     return (
-      <p className="text-[13px] text-slate-500">
-        No zones drawn yet. Prime is ₹5/km and Secondary ₹2/km; everywhere else is Network at
-        ₹1/km.
-      </p>
+      <div className="min-w-0">
+        <p className="text-[13px] text-slate-500">
+          No zones drawn yet. Prime is ₹5/km and Secondary ₹2/km; everywhere else is Network at
+          ₹1/km.
+        </p>
+        {selected > 0 ? (
+          <p className="mt-1 text-[13px] text-slate-600">
+            {selected} of {matched} vehicle{matched === 1 ? '' : 's'} selected, all at the
+            Network rate.
+          </p>
+        ) : null}
+      </div>
     );
   }
 
@@ -313,9 +347,9 @@ function ZoneSummary({
       </div>
       <p className="mt-1.5 text-[13px] text-slate-600">
         {loading
-          ? 'Looking up vehicles in these outlines…'
+          ? 'Looking up vehicles…'
           : matched === 0
-            ? 'No vehicles have an operating pin inside these outlines yet.'
+            ? 'No vehicles are onboarded in this city yet.'
             : `${selected} of ${matched} vehicle${matched === 1 ? '' : 's'} selected.`}
       </p>
     </div>
@@ -364,7 +398,7 @@ function VehicleRow({
     >
       <input
         type="checkbox"
-        className="text-brand-600 focus:ring-brand-500 mt-2 size-4 shrink-0 rounded border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
+        className="mt-2 size-4 shrink-0 rounded border-slate-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-40"
         checked={checked}
         disabled={!orderable}
         onChange={onToggle}
@@ -408,9 +442,9 @@ function VehicleRow({
             <span className="truncate">{areaLabel(row)}</span>
             <span
               className="ml-0.5 shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium text-white"
-              style={{ background: ZONE_MAP_COLORS[row.zone].stroke }}
+              style={{ background: ZONE_CHIP[row.zone].background }}
             >
-              {row.zone === 'prime' ? 'Prime' : 'Secondary'}
+              {ZONE_CHIP[row.zone].label}
             </span>
             <span className="shrink-0 text-slate-400">{kindLabel(row.vehicleType)}</span>
           </span>

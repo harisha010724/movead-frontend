@@ -58,6 +58,7 @@ function respondWith(items: AvailableVehicle[]) {
     items,
     primeCount: items.filter((row) => row.zone === 'prime').length,
     secondaryCount: items.filter((row) => row.zone === 'secondary').length,
+    networkCount: items.filter((row) => row.zone === 'network').length,
     availableCount: items.filter((row) => row.availability === 'available').length,
   });
 }
@@ -94,7 +95,9 @@ function renderCard(
     </QueryClientProvider>,
   );
 
-  if (open) fireEvent.click(screen.getByRole('button', { name: /zones and vehicles/ }));
+  // Matches both labels: the button reads "Draw zones and pick vehicles" until
+  // something is drawn, and "Edit zones and vehicles" afterwards.
+  if (open) fireEvent.click(screen.getByRole('button', { name: /zones and/ }));
 
   return { onChange };
 }
@@ -205,12 +208,16 @@ describe('the vehicle picker', () => {
   });
 
   it('offers no free-from date for a vehicle that is merely unapproved', async () => {
-    renderCard([vehicle({ status: 'PENDING', availability: 'pending', bookedUntil: '2026-09-30' })]);
+    renderCard([
+      vehicle({ status: 'PENDING', availability: 'pending', bookedUntil: '2026-09-30' }),
+    ]);
 
     await screen.findByText(PLATE);
     const row = rowFor(PLATE);
     expect(within(row).getByText(/has not approved this vehicle/)).toBeInTheDocument();
-    expect(within(row).queryByText(new RegExp(formatDate('2026-09-30')))).not.toBeInTheDocument();
+    expect(
+      within(row).queryByText(new RegExp(formatDate('2026-09-30'))),
+    ).not.toBeInTheDocument();
   });
 
   it('explains nothing on a vehicle that can simply be bought', async () => {
@@ -265,6 +272,47 @@ describe('the vehicle picker', () => {
     expect(screen.queryByRole('region', { name: 'Campaign zone map' })).not.toBeInTheDocument();
   });
 
+  /**
+   * The order the work actually happens in: a buyer decides where to advertise
+   * by looking at where the vehicles are. Gating the list behind a closed
+   * polygon asked for that decision backwards, and an empty list then meant
+   * either "no supply here" or "you have not drawn anything" with no way to
+   * tell which.
+   */
+  it('lists the fleet before any zone is drawn, at the Network rate', async () => {
+    renderCard([vehicle({ zone: 'network' })], { polygons: {} });
+
+    expect(await screen.findByText(PLATE)).toBeInTheDocument();
+    expect(within(rowFor(PLATE)).getByText('Network')).toBeInTheDocument();
+    expect(within(rowFor(PLATE)).getByRole('checkbox')).toBeEnabled();
+    expect(
+      screen.getByText(/every vehicle bills at the Network rate of ₹1\/km/),
+    ).toBeInTheDocument();
+  });
+
+  /** Drawing moves a vehicle between tiers; it never removes it from the list. */
+  it('drops the Network rate note once an outline exists', async () => {
+    renderCard([vehicle()]);
+
+    await screen.findByText(PLATE);
+    expect(
+      screen.queryByText(/every vehicle bills at the Network rate/),
+    ).not.toBeInTheDocument();
+    expect(within(rowFor(PLATE)).getByText('Prime')).toBeInTheDocument();
+  });
+
+  it('asks again with the new city when the campaign moves', async () => {
+    renderCard([vehicle()], { city: 'Mysuru' });
+
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/v1/campaigns/available-vehicles', {
+        vehicleType: 'CAB',
+        city: 'Mysuru',
+        zonePolygons: POLYGONS,
+      });
+    });
+  });
+
   /* The selection is the form's, so it has to survive the move both ways. */
   it('keeps the selection across opening', async () => {
     const { onChange } = renderCard([vehicle()], { selectedIds: ['veh_1'] });
@@ -281,18 +329,33 @@ describe('the vehicle picker', () => {
  * into the dialog to find out whether they had drawn anything.
  */
 describe('the closed card', () => {
-  it('says nothing is drawn, and asks no questions of the server', () => {
+  it('says nothing is drawn, and asks the server anyway', async () => {
     renderCard([], { polygons: {} }, { open: false });
 
     expect(screen.getByText(/No zones drawn yet/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Draw zones and pick vehicles' })).toBeInTheDocument();
-    expect(post).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole('button', { name: 'Draw zones and pick vehicles' }),
+    ).toBeInTheDocument();
+
+    // The list used to wait for a polygon, which asked a buyer to choose where
+    // to advertise before showing them where the vehicles are.
+    await waitFor(() => {
+      expect(post).toHaveBeenCalledWith('/v1/campaigns/available-vehicles', {
+        vehicleType: 'CAB',
+        city: 'Bengaluru',
+        zonePolygons: {},
+      });
+    });
   });
 
   it('names the zones drawn and how much of what they caught is taken', async () => {
-    renderCard([vehicle(), vehicle({ id: 'veh_2', registrationNumber: 'KA02CD5678' })], {
-      selectedIds: ['veh_1'],
-    }, { open: false });
+    renderCard(
+      [vehicle(), vehicle({ id: 'veh_2', registrationNumber: 'KA02CD5678' })],
+      {
+        selectedIds: ['veh_1'],
+      },
+      { open: false },
+    );
 
     expect(await screen.findByText('1 of 2 vehicles selected.')).toBeInTheDocument();
     expect(screen.getByText('Prime')).toBeInTheDocument();
@@ -300,11 +363,11 @@ describe('the closed card', () => {
     expect(screen.getByRole('button', { name: 'Edit zones and vehicles' })).toBeInTheDocument();
   });
 
-  it('does not claim an empty zone is a finished choice', async () => {
+  it('does not claim an empty city is a finished choice', async () => {
     renderCard([], {}, { open: false });
 
     expect(
-      await screen.findByText(/No vehicles have an operating pin inside these outlines/),
+      await screen.findByText(/No vehicles are onboarded in this city yet/),
     ).toBeInTheDocument();
   });
 

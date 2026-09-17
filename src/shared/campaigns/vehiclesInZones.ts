@@ -3,8 +3,18 @@ import { api } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { formatDate, formatRegistration } from '@/shared/format';
 import { addIsoDays } from '@/shared/lib/civilDate';
-import type { ZonePolygons } from '@/shared/maps/types';
+import { ZONE_MAP_COLORS } from '@/shared/maps/zoneColors';
+import type { ZonePolygons, ZoneTier } from '@/shared/maps/types';
 import type { VehicleAvailability } from '@/shared/types/domain';
+
+/**
+ * Where a vehicle's pin sits relative to the drawn outlines.
+ *
+ * `ZoneTier` cannot be widened to include this: only Prime and Secondary can be
+ * drawn, and Network is what is left over. A vehicle, unlike a polygon, can be
+ * in that leftover — at ₹1/km rather than not at all.
+ */
+export type VehicleZone = ZoneTier | 'network';
 
 export interface AvailableVehicle {
   id: string;
@@ -16,7 +26,7 @@ export interface AvailableVehicle {
   areaLabel: string;
   lat: number;
   lng: number;
-  zone: 'prime' | 'secondary';
+  zone: VehicleZone;
   status: string;
   availability: VehicleAvailability;
   /** Only on a booked vehicle: when the campaign holding it ends (AC-22.4c). */
@@ -29,12 +39,12 @@ export interface AvailableVehiclesResponse {
   items: AvailableVehicle[];
   primeCount: number;
   secondaryCount: number;
+  networkCount: number;
   availableCount: number;
 }
 
 export type VehiclesEndpoint =
-  | '/v1/campaigns/available-vehicles'
-  | '/v1/admin/vehicles/in-zones';
+  '/v1/campaigns/available-vehicles' | '/v1/admin/vehicles/in-zones';
 
 export const AVAILABILITY: Record<
   VehicleAvailability,
@@ -53,33 +63,56 @@ export const AVAILABILITY: Record<
   },
 };
 
+/**
+ * The tier chip on a vehicle row.
+ *
+ * `ZONE_MAP_COLORS` deliberately covers only what can be drawn, so Network
+ * needs its own swatch — a neutral one, because it is where the outlines are
+ * not rather than a third zone someone forgot to draw.
+ */
+export const ZONE_CHIP: Record<VehicleZone, { label: string; background: string }> = {
+  prime: { label: 'Prime', background: ZONE_MAP_COLORS.prime.stroke },
+  secondary: { label: 'Secondary', background: ZONE_MAP_COLORS.secondary.stroke },
+  network: { label: 'Network', background: '#64748b' },
+};
+
 /** An outline only selects vehicles once it encloses something. */
 export function hasOutline(polygons: ZonePolygons | undefined): boolean {
   return Boolean(
     (polygons?.prime?.path && polygons.prime.path.length >= 3) ||
-      (polygons?.secondary?.path && polygons.secondary.path.length >= 3),
+    (polygons?.secondary?.path && polygons.secondary.path.length >= 3),
   );
 }
 
 /**
- * Vehicles whose onboard pin falls inside the draft outlines.
+ * The city's fleet, each vehicle tiered by the draft outlines.
  *
- * Lifted out of the list because the map now shows the same vehicles: two
+ * Runs before anything is drawn, which is the point: a buyer picks where to
+ * advertise by looking at where the vehicles are, and the old behaviour —
+ * nothing listed until a polygon closed — asked for that decision in the
+ * opposite order. Drawing now moves vehicles between Prime, Secondary and
+ * Network rather than in and out of the list.
+ *
+ * Lifted out of the list because the map shows the same vehicles: two
  * components fetching this separately would put two answers on one screen.
  */
 export function useVehiclesInZones(
   endpoint: VehiclesEndpoint,
   vehicleType: 'CAB' | 'AUTO',
+  city: string,
   polygons: ZonePolygons | undefined,
 ) {
   return useQuery({
-    queryKey: queryKeys.vehicles.inZones(vehicleType, polygons),
+    queryKey: queryKeys.vehicles.inZones(vehicleType, city, polygons),
     queryFn: () =>
       api.post<AvailableVehiclesResponse>(endpoint, {
         vehicleType,
+        city,
         zonePolygons: polygons ?? {},
       }),
-    enabled: hasOutline(polygons),
+    // A city is the one thing the list cannot be built without: it is what
+    // scopes the fleet, and the form asks for it before this card is reached.
+    enabled: Boolean(city),
   });
 }
 

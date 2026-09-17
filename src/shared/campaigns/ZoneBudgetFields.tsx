@@ -68,8 +68,7 @@ export function ZoneBudgetFields<T extends ZoneBudgetValues>({
         <span className="numeric font-semibold text-slate-900">{formatINR(total)}</span>
         <span className="text-slate-400">
           {' '}
-          · Prime × ₹{ZONE_RATES.prime} + Secondary × ₹{ZONE_RATES.secondary} · excluding GST ·
-          minimum ₹10,000
+          · Prime × ₹{ZONE_RATES.prime} + Secondary × ₹{ZONE_RATES.secondary} · excluding GST
           {description ? ` · ${description}` : ''}
         </span>
       </p>

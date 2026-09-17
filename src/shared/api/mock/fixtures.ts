@@ -500,7 +500,8 @@ export const mockDrivers: MockDriver[] = Array.from({ length: 10 }, (_, i) => {
     name: ['Ramesh Babu', 'Suresh Yadav', 'Manoj Singh', 'Vijay Kumar', 'Arun N'][i % 5] ?? '',
     mobile: `98${String(40000000 + i * 137)}`,
     status:
-      (['PENDING', 'DOCUMENTS_SUBMITTED', 'APPROVED', 'SUSPENDED'] as const)[i % 4] ?? 'PENDING',
+      (['PENDING', 'DOCUMENTS_SUBMITTED', 'APPROVED', 'SUSPENDED'] as const)[i % 4] ??
+      'PENDING',
     photoKey: null,
     joinedAt: new Date(Date.now() - i * 86_400_000).toISOString(),
     city: 'Bengaluru',
@@ -579,7 +580,7 @@ export function vehiclesInZones(
     areaLabel: string;
     lat: number;
     lng: number;
-    zone: 'prime' | 'secondary';
+    zone: 'prime' | 'secondary' | 'network';
     status: string;
     availability: 'available' | 'booked' | 'pending';
     bookedUntil?: string;
@@ -587,26 +588,34 @@ export function vehiclesInZones(
   }[];
   primeCount: number;
   secondaryCount: number;
+  networkCount: number;
   availableCount: number;
 } {
   const body = input as {
     vehicleType?: 'AUTO' | 'CAB';
+    city?: string;
     zonePolygons?: Parameters<typeof zoneForPoint>[1];
   };
   const items = mockDrivers
     .filter((driver) => driver.status !== 'SUSPENDED' && driver.vehicle && driver.location)
     .filter((driver) => driver.vehicle?.category === (body.vehicleType ?? 'CAB'))
+    .filter((driver) => !body.city || driver.city.toLowerCase() === body.city.toLowerCase())
     .map((driver) => {
       const pin = driver.location;
       const vehicle = driver.vehicle;
       if (!pin || !vehicle) return null;
-      const zone = zoneForPoint(pin, body.zonePolygons ?? {});
-      if (!zone) return null;
+      // Outside both outlines is Network, not excluded: the outlines price the
+      // fleet rather than filter it. Mirrors `selectableVehicles`.
+      const zone: 'prime' | 'secondary' | 'network' =
+        zoneForPoint(pin, body.zonePolygons ?? {}) ?? 'network';
       const availability = mockAvailability(vehicle.status);
       return {
         id: vehicle.id,
         vehicleType: vehicle.category,
-        publicRef: `VH-${vehicle.id.replace(/[^a-z0-9]/gi, '').slice(0, 4).toUpperCase()}`,
+        publicRef: `VH-${vehicle.id
+          .replace(/[^a-z0-9]/gi, '')
+          .slice(0, 4)
+          .toUpperCase()}`,
         registrationNumber: vehicle.registrationNumber,
         areaLabel: pin.label,
         lat: pin.lat,
@@ -625,6 +634,7 @@ export function vehiclesInZones(
     items,
     primeCount: items.filter((row) => row.zone === 'prime').length,
     secondaryCount: items.filter((row) => row.zone === 'secondary').length,
+    networkCount: items.filter((row) => row.zone === 'network').length,
     availableCount: items.filter((row) => row.availability === 'available').length,
   };
 }
@@ -705,7 +715,8 @@ function checklistFor(driverId: string, owner: 'driver' | 'vehicle'): MockCheckl
         ? null
         : new Date(Date.now() + (200 + index * 30) * 86_400_000).toISOString().slice(0, 10),
     rejectionReason: null,
-    contentType: status === 'missing' ? null : index % 3 === 0 ? 'application/pdf' : 'image/jpeg',
+    contentType:
+      status === 'missing' ? null : index % 3 === 0 ? 'application/pdf' : 'image/jpeg',
     uploadedAt: status === 'missing' ? null : new Date(Date.now() - 3_600_000).toISOString(),
   }));
 
@@ -768,7 +779,10 @@ export function decideMockDocument(
   return null;
 }
 
-export function setMockDriverStatus(driverId: string, status: MockDriver['status']): MockDriver | null {
+export function setMockDriverStatus(
+  driverId: string,
+  status: MockDriver['status'],
+): MockDriver | null {
   const driver = mockDrivers.find((d) => d.id === driverId);
   if (!driver) return null;
   driver.status = status;
@@ -1056,7 +1070,10 @@ export interface MockEmailChange {
 export function updateMockUser(
   userId: string,
   changes: { fullName?: string; email?: string },
-): { user: NonNullable<MockAdminAdvertiser['primaryUser']>; emailChange: MockEmailChange } | null {
+): {
+  user: NonNullable<MockAdminAdvertiser['primaryUser']>;
+  emailChange: MockEmailChange;
+} | null {
   const advertiser = mockAdminAdvertisers.find((a) => a.primaryUser?.id === userId);
   const user = advertiser?.primaryUser;
   if (!advertiser || !user) return null;

@@ -60,10 +60,9 @@ describe('campaignSchema', () => {
     expect(errorFor({ ...valid, name: 'ab' }, 'name')).toMatch(/at least 3/);
   });
 
-  it('rejects planned spend below the ₹10,000 minimum', () => {
-    expect(
-      errorFor({ ...valid, zonePrimeKm: '100', zoneSecondaryKm: '100' }, 'zonePrimeKm'),
-    ).toMatch(/10,000/);
+  it('accepts planned spend of any size', () => {
+    expect(campaignSchema.safeParse({ ...valid, zonePrimeKm: '1', zoneSecondaryKm: '0' }).success)
+      .toBe(true);
   });
 
   it('accepts a drawn outline even without a searched place', () => {
@@ -175,9 +174,9 @@ describe('adminCampaignSchema', () => {
   });
 
   it('applies the same campaign rules as the advertiser form (AC-34.1)', () => {
-    expect(
-      adminErrorFor({ ...adminValid, zonePrimeKm: '100', zoneSecondaryKm: '100' }, 'zonePrimeKm'),
-    ).toMatch(/10,000/);
+    expect(adminErrorFor({ ...adminValid, locations: [], zonePolygons: {} }, 'locations')).toMatch(
+      /outline on the map/,
+    );
     expect(
       adminErrorFor({ ...adminValid, startDate: '2026-09-01', endDate: '2026-09-02' }, 'endDate'),
     ).toMatch(/at least 7 days/);

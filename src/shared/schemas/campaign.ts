@@ -131,11 +131,6 @@ interface DatedCampaign {
   endDate: string;
 }
 
-interface ZonedCampaign {
-  zonePrimeKm: string;
-  zoneSecondaryKm: string;
-}
-
 /** Minimum run length. A wrap costs the same however short the campaign is. */
 export const CAMPAIGN_MINIMUM_DAYS = 7;
 
@@ -198,17 +193,8 @@ export function withMapRules<T extends z.ZodType<MappedCampaign>>(schema: T) {
   );
 }
 
-export function withZoneBudgetRules<T extends z.ZodType<ZonedCampaign>>(schema: T) {
-  return schema.refine((data) => plannedSpend(data) >= 10_000, {
-    message: 'Minimum campaign budget is ₹10,000 (Prime km × ₹5 + Secondary km × ₹2)',
-    path: ['zonePrimeKm'],
-  });
-}
-
 /** AC-01: the advertiser creating their own campaign. */
-export const campaignSchema = withZoneBudgetRules(
-  withDateRules(withMapRules(z.object(campaignFields))),
-);
+export const campaignSchema = withDateRules(withMapRules(z.object(campaignFields)));
 
 export type CampaignFormValues = z.input<typeof campaignSchema>;
 
@@ -221,9 +207,8 @@ export type CampaignFormValues = z.input<typeof campaignSchema>;
  * configured needs a retained reference back to the request that authorised it
  * (AC-34.5) — without it, nobody can later show who asked for this spend.
  */
-export const adminCampaignSchema = withZoneBudgetRules(
-  withDateRules(
-    withMapRules(
+export const adminCampaignSchema = withDateRules(
+  withMapRules(
     z.object({
       ...campaignFields,
       advertiserId: z.string().min(1, 'Select the advertiser this campaign belongs to'),
@@ -237,7 +222,6 @@ export const adminCampaignSchema = withZoneBudgetRules(
         .max(140, 'Reference must be 140 characters or fewer'),
       instructionDate: z.string().min(1, 'Select the date of the instruction'),
     }),
-    ),
   ),
 );
 
