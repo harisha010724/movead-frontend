@@ -7,6 +7,7 @@ export {
   controlInvalidClass,
 } from './controls';
 export { TextField, type TextFieldProps } from './TextField';
+export { PasswordField, type PasswordFieldProps } from './PasswordField';
 export { DateField, type DateFieldProps } from './DateField';
 export { TextareaField, type TextareaFieldProps } from './TextareaField';
 export { SelectField, InlineSelect, SelectItem, type SelectOption } from './Select';

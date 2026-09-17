@@ -11,7 +11,7 @@ import { LOGIN_PATH, portalPath, type Portal } from '@/shared/auth/portals';
 import { useAuth } from '@/shared/auth/useAuth';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
 import { Button, Spinner } from '@/shared/ui';
-import { FormError, TextField } from '@/shared/ui/form';
+import { FormError, PasswordField } from '@/shared/ui/form';
 import {
   acceptInvitationSchema,
   type AcceptInvitationValues,
@@ -151,9 +151,8 @@ export default function AcceptInvitationPage() {
         {/* Off-screen, so a password manager saves the pair rather than just a password. */}
         <input type="email" value={email} autoComplete="username" readOnly hidden />
 
-        <TextField
+        <PasswordField
           label="Choose a password"
-          type="password"
           autoComplete="new-password"
           autoFocus
           hint="At least 12 characters. A phrase you can remember beats a short scramble."
@@ -162,9 +161,8 @@ export default function AcceptInvitationPage() {
           {...form.register('password')}
         />
 
-        <TextField
+        <PasswordField
           label="Confirm password"
-          type="password"
           autoComplete="new-password"
           className="h-12 rounded-xl text-[15px]"
           error={form.formState.errors.confirm?.message}

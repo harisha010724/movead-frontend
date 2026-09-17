@@ -10,7 +10,7 @@ import { useAuth } from '@/shared/auth/useAuth';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
 import { Button, toast } from '@/shared/ui';
 import { FullPageSpinner } from '@/shared/ui/Spinner';
-import { TextField } from '@/shared/ui/form';
+import { PasswordField, TextField } from '@/shared/ui/form';
 import { AuthLayout } from './AuthLayout';
 import { GoogleMark } from './GoogleMark';
 import { isHomePortal, portalLabel, portalPath, type Portal } from './portals';
@@ -265,9 +265,8 @@ export function LoginPage() {
             />
 
             <div>
-              <TextField
+              <PasswordField
                 label="Password"
-                type="password"
                 autoComplete="current-password"
                 className="h-12 rounded-xl text-[15px]"
                 error={credentialsForm.formState.errors.password?.message}

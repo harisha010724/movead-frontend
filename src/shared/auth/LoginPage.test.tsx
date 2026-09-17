@@ -187,6 +187,35 @@ describe('when the credentials are refused', () => {
   });
 });
 
+/**
+ * Passwords are issued by operations and arrive by email, so the usual failure
+ * is a character that did not survive the retype. Being able to look is the
+ * difference between fixing that and reporting a broken account.
+ */
+describe('the password field', () => {
+  it('reveals what was typed, and hides it again', () => {
+    renderLogin();
+
+    const password = screen.getByLabelText('Password');
+    expect(password).toHaveAttribute('type', 'password');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
+  });
+
+  /** A bare <button> inside a form submits it, which would sign in half-typed. */
+  it('does not submit the form it sits in', () => {
+    renderLogin();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show password' }));
+
+    expect(post).not.toHaveBeenCalled();
+  });
+});
+
 describe('a second factor', () => {
   it('is asked for, and carries the account to its own product afterwards', async () => {
     post.mockResolvedValueOnce({
