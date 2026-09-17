@@ -428,6 +428,15 @@ export function useInstallationQueue() {
   });
 }
 
+/** The other half of the queue: wraps to fit and photograph, before review. */
+export function useInstallationFittingQueue() {
+  return useQuery({
+    queryKey: queryKeys.installations.pending(),
+    queryFn: () => api.get<{ items: Assignment[] }>('/v1/admin/installations/pending'),
+    ...freshness.aggregate,
+  });
+}
+
 export function useInstallationPhotos(assignmentId: string | null) {
   return useQuery({
     queryKey: queryKeys.installations.photos(assignmentId ?? ''),

@@ -29,6 +29,8 @@ export const queryKeys = {
 
   installations: {
     queue: () => ['installations', 'queue'] as const,
+    /** Wraps still to be fitted, which is the queue before `queue()`. */
+    pending: () => ['installations', 'pending'] as const,
     photos: (assignmentId: string) => ['installations', assignmentId, 'photos'] as const,
   },
 
@@ -44,8 +46,8 @@ export const queryKeys = {
     detail: (id: string) => ['vehicles', 'detail', id] as const,
     livePositions: (campaignId: string | null) =>
       ['vehicles', 'live-positions', campaignId] as const,
-    inZones: (vehicleType: string, polygons: unknown) =>
-      ['vehicles', 'in-zones', vehicleType, polygons] as const,
+    inZones: (vehicleType: string, city: string, polygons: unknown) =>
+      ['vehicles', 'in-zones', vehicleType, city, polygons] as const,
     available: (vehicleType?: string) =>
       ['vehicles', 'available', vehicleType ?? 'all'] as const,
   },

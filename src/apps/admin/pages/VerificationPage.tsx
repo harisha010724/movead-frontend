@@ -1,12 +1,17 @@
 import { useState } from 'react';
-import { useDrivers, useInstallationQueue } from '@/shared/api/hooks';
+import {
+  useDrivers,
+  useInstallationFittingQueue,
+  useInstallationQueue,
+} from '@/shared/api/hooks';
 import { Page } from '@/shared/layout/Page';
 import { Card, CardBody, CardHeader, Tab, TabList, TabPanel, Tabs } from '@/shared/ui';
 
 import { DocumentQueue } from './DocumentQueue';
+import { FittingQueue } from './FittingQueue';
 import { InstallationQueue } from './InstallationQueue';
 
-type QueueId = 'documents' | 'installations' | 'kilometres';
+type QueueId = 'documents' | 'fitting' | 'installations' | 'kilometres';
 
 const QUEUES: { id: QueueId; label: string; description: string }[] = [
   {
@@ -14,6 +19,12 @@ const QUEUES: { id: QueueId; label: string; description: string }[] = [
     label: 'Documents',
     description:
       'Driving licence, RC and insurance. A vehicle cannot be approved until every document is verified and unexpired.',
+  },
+  {
+    id: 'fitting',
+    label: 'Wraps to fit',
+    description:
+      'Vehicles assigned to a campaign whose wrap has not been photographed yet. Marking a campaign installed does not do this: tracking is gated per vehicle, so a wrap that is never photographed here leaves its driver unable to start (AC-07).',
   },
   {
     id: 'installations',
@@ -33,6 +44,7 @@ export default function VerificationPage() {
   const [tab, setTab] = useState<QueueId>('documents');
   // Shared cache with the queues below, so naming the counts costs no extra fetch.
   const installationCount = useInstallationQueue().data?.items.length ?? 0;
+  const fittingCount = useInstallationFittingQueue().data?.items.length ?? 0;
   const documentCount = useDrivers({ status: 'DOCUMENTS_SUBMITTED' }).data?.items.length ?? 0;
 
   return (
@@ -49,9 +61,11 @@ export default function VerificationPage() {
               count={
                 q.id === 'documents'
                   ? documentCount
-                  : q.id === 'installations'
-                    ? installationCount
-                    : undefined
+                  : q.id === 'fitting'
+                    ? fittingCount
+                    : q.id === 'installations'
+                      ? installationCount
+                      : undefined
               }
             >
               {q.label}
@@ -72,6 +86,8 @@ export default function VerificationPage() {
                 */}
                 {q.id === 'documents' ? (
                   <DocumentQueue />
+                ) : q.id === 'fitting' ? (
+                  <FittingQueue />
                 ) : q.id === 'installations' ? (
                   <InstallationQueue />
                 ) : (
