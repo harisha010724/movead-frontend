@@ -146,7 +146,12 @@ const currentUser = () => userFor(requestPortal());
 const unauthenticated = (message = 'Sign in to continue.') =>
   json({ code: 'unauthenticated', message }, 401);
 
-type Handler = (body: unknown) => Response;
+/**
+ * `query` is the parsed query string. Handlers that ignore filtering simply
+ * ignore the argument, but one that the real API filters on the server has to
+ * see it here too, or mock mode reviews a screen the backend will not serve.
+ */
+type Handler = (body: unknown, query: URLSearchParams) => Response;
 type ParamHandler = (id: string, body: unknown) => Response;
 
 const handlers: Record<string, Handler> = {
@@ -270,8 +275,36 @@ const handlers: Record<string, Handler> = {
 
   'GET /v1/vehicles': () =>
     json({ items: fx.mockVehicles, page: 1, pageSize: 20, total: fx.mockVehicles.length }),
-  'GET /v1/vehicles/live-positions': () =>
-    json({ items: fx.mockLivePositions, updatedAt: new Date().toISOString() }),
+  /*
+   * Matched the way the server matches it: exactly, once punctuation is gone.
+   * The real endpoint refuses a partial plate rather than guessing, and a mock
+   * that helpfully found something would hide that from whoever is reviewing
+   * the screen.
+   */
+  'GET /v1/admin/gps-audit/trips': (_body, query) => {
+    const vehicleNumber = query.get('vehicleNumber') ?? '';
+    const date = query.get('date') ?? '';
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return json({ code: 'validation_failed', message: 'A date is required.' }, 400);
+    }
+
+    const day = fx.mockAuditDay(vehicleNumber, date);
+    return day.vehicle.registrationNumber.length >= 9
+      ? json(day)
+      : json({ code: 'not_found', message: 'No vehicle carries that registration.' }, 404);
+  },
+
+  'GET /v1/vehicles/live-positions': (_body, query) => {
+    // Matched the way the server matches it: normalised, and as a substring,
+    // because the digits someone remembers are the ones on the end.
+    const needle = (query.get('vehicleNumber') ?? '').replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const items = needle
+      ? fx.mockLivePositions.filter((v) => v.vehicleRef.includes(needle))
+      : fx.mockLivePositions;
+
+    return json({ items, updatedAt: new Date().toISOString() });
+  },
 
   'GET /v1/admin/drivers': () =>
     json({ items: fx.mockDrivers, page: 1, pageSize: 20, total: fx.mockDrivers.length }),
@@ -543,6 +576,11 @@ const paramHandlers: Record<string, ParamHandler> = {
     return detail ? json(detail) : json({ code: 'not_found', message: 'No such driver.' }, 404);
   },
 
+  'GET /v1/admin/gps-audit/trips/*': (id) => {
+    const trip = fx.mockTripDetail(id);
+    return trip ? json(trip) : json({ code: 'not_found', message: 'No such trip.' }, 404);
+  },
+
   'POST /v1/admin/documents/*/verify': (id) => {
     const item = fx.decideMockDocument(id, 'verified', null);
     return item ? json(item) : json({ code: 'not_found', message: 'No such document.' }, 404);
@@ -743,9 +781,11 @@ export async function mockFetch(
   // A little latency makes loading and skeleton states visible during review.
   await delay(220 + Math.random() * 260);
 
-  const pathname = path.split('?')[0] ?? path;
+  const [pathname = path, search = ''] = path.split('?');
+  const query = new URLSearchParams(search);
+
   const handler = handlers[`${method} ${pathname}`];
-  if (handler) return handler(body);
+  if (handler) return handler(body, query);
 
   const parameterised = matchParamHandler(method, pathname);
   if (parameterised) return parameterised.handler(parameterised.id, body);

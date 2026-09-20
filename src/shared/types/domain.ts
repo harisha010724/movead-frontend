@@ -347,6 +347,67 @@ export interface LivePosition {
   updatedAt: string;
 }
 
+// --- GPS audit (AC-25) ---------------------------------------------------
+
+export type TripStatus = 'verified' | 'pending_review' | 'rejected';
+export type SegmentState = 'BILLABLE' | 'PENDING_REVIEW' | 'NON_BILLABLE';
+
+/** Lowercase on the wire, unlike `ZoneTier`, which is how the badge wants it. */
+export type ZoneKey = 'prime' | 'secondary' | 'network';
+
+export interface AuditTrip {
+  id: string;
+  sequence: number;
+  startedAt: string;
+  endedAt: string;
+  verifiedKm: number;
+  earnings: Money;
+  status: TripStatus;
+  zoneBreakdown: { zone: ZoneKey; km: number; earnings: Money }[] | null;
+}
+
+export interface AuditDay {
+  vehicle: { id: string; registrationNumber: string };
+  date: string;
+  totalVerifiedKm: number;
+  totalEarnings: Money;
+  totalCharge: Money;
+  trips: AuditTrip[];
+}
+
+/**
+ * A stretch of one journey that the pricing pipeline treated as a single
+ * fact: same zone, same state, same reason. Consecutive GPS pairs agreeing on
+ * all three arrive merged, so the count is in `segments` rather than in rows.
+ */
+export interface TripLeg {
+  zone: ZoneKey;
+  state: SegmentState;
+  flagReason: string | null;
+  startedAt: string;
+  endedAt: string;
+  distanceKm: number;
+  advertiserRate: Money;
+  driverRate: Money;
+  advertiserCharge: Money;
+  driverEarning: Money;
+  segments: number;
+  path: { lat: number; lng: number }[];
+}
+
+export interface TripDetail {
+  id: string;
+  vehicleRegistration: string;
+  campaignName: string;
+  driverName: string;
+  startedAt: string;
+  endedAt: string | null;
+  distanceKm: number;
+  advertiserCharge: Money;
+  driverEarning: Money;
+  legs: TripLeg[];
+}
+
 export interface Paginated<T> {
   items: T[];
   page: number;

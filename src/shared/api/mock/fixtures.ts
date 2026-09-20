@@ -156,8 +156,6 @@ export const mockDriverEligibility = {
     { id: 'vehicle_approved', label: 'Vehicle approved', passed: true },
     { id: 'campaign_assigned', label: 'Campaign assigned', passed: true },
     { id: 'ad_installed', label: 'Advertisement installed', passed: true },
-    { id: 'installation_verified', label: 'Installation verified', passed: true },
-    { id: 'campaign_active', label: 'Campaign active', passed: true },
   ],
 };
 
@@ -443,13 +441,183 @@ export const mockAdminDashboard = {
   ],
 };
 
+/*
+ * Plates rather than `VH-` references. The live map names a vehicle by its
+ * registration number (AC-22.4) and is searched by it, so a fixture carrying
+ * opaque ids cannot exercise the search it is standing in for. Two series of
+ * letters so a partial query narrows to something rather than to everything.
+ */
 export const mockLivePositions = Array.from({ length: 24 }, (_, i) => ({
-  vehicleRef: `VH-${String(1001 + i)}`,
+  vehicleRef: `KA${String(1 + (i % 4)).padStart(2, '0')}${i % 2 ? 'AB' : 'CD'}${String(1000 + i * 37)}`,
   lat: 12.9716 + ((i % 7) - 3) * 0.018,
   lon: 77.5946 + ((i % 5) - 2) * 0.022,
   state: (['RUNNING', 'RUNNING', 'RUNNING', 'IDLE', 'OFFLINE', 'GPS_PAUSED'] as const)[i % 6],
   updatedAt: new Date(Date.now() - i * 9_000).toISOString(),
 }));
+
+/*
+ * A day of audited trips (AC-25).
+ *
+ * Built rather than listed, because the screen is entered with a plate and a
+ * date and both are free text: a hard-coded day would answer one search and
+ * leave every other looking broken. Distances and money reconcile at the ₹5 /
+ * ₹2 / ₹1 advertiser rates with the driver taking 60%, so the totals a
+ * reviewer adds up by hand here are the ones the real engine would produce.
+ */
+const ADVERTISER_RATES: Record<AuditZone, number> = { prime: 5, secondary: 2, network: 1 };
+const DRIVER_SHARE = 0.6;
+
+type AuditZone = 'prime' | 'secondary' | 'network';
+
+/** Northbound through Prime, unzoned ground and Secondary, as the real boxes are laid out. */
+const MOCK_LEG_PLAN: { zone: AuditZone; km: number; from: number; to: number }[][] = [
+  [
+    { zone: 'prime', km: 4.2, from: 12.958, to: 12.994 },
+    { zone: 'network', km: 2.6, from: 12.994, to: 13.016 },
+    { zone: 'secondary', km: 5.1, from: 13.016, to: 13.06 },
+  ],
+  [
+    { zone: 'secondary', km: 3.4, from: 13.06, to: 13.031 },
+    { zone: 'prime', km: 6.8, from: 13.031, to: 12.972 },
+  ],
+  [
+    { zone: 'network', km: 1.9, from: 12.972, to: 12.956 },
+    { zone: 'prime', km: 2.3, from: 12.956, to: 12.936 },
+    { zone: 'network', km: 3.7, from: 12.936, to: 12.904 },
+  ],
+];
+
+function mockLeg(
+  plan: (typeof MOCK_LEG_PLAN)[number][number],
+  startedAt: Date,
+  minutes: number,
+  held: boolean,
+) {
+  const charge = plan.km * ADVERTISER_RATES[plan.zone];
+  const ended = new Date(startedAt.getTime() + minutes * 60_000);
+
+  return {
+    zone: plan.zone,
+    state: held ? ('PENDING_REVIEW' as const) : ('BILLABLE' as const),
+    flagReason: held ? 'GPS accuracy above 50 m for the whole stretch' : null,
+    startedAt: startedAt.toISOString(),
+    endedAt: ended.toISOString(),
+    distanceKm: plan.km,
+    advertiserRate: asMoney(ADVERTISER_RATES[plan.zone].toFixed(4)),
+    driverRate: asMoney((ADVERTISER_RATES[plan.zone] * DRIVER_SHARE).toFixed(4)),
+    advertiserCharge: asMoney(held ? '0.0000' : charge.toFixed(4)),
+    driverEarning: asMoney(held ? '0.00' : (charge * DRIVER_SHARE).toFixed(2)),
+    segments: Math.max(2, Math.round(plan.km * 9)),
+    // A straight run at a fixed longitude, sampled often enough to look like a
+    // line rather than a chord.
+    path: Array.from({ length: 9 }, (_, step) => ({
+      lat: plan.from + ((plan.to - plan.from) * step) / 8,
+      lng: 77.5946 + (plan.from - 12.97) * 0.35,
+    })),
+  };
+}
+
+/** The third trip of any day is half held, so the screen always has a dispute on it. */
+function mockTripLegs(tripIndex: number, startedAt: Date) {
+  const plan = MOCK_LEG_PLAN[tripIndex % MOCK_LEG_PLAN.length] ?? [];
+  let offset = 0;
+
+  return plan.map((leg, index) => {
+    const at = new Date(startedAt.getTime() + offset * 60_000);
+    offset += Math.round(leg.km * 3);
+    return mockLeg(leg, at, Math.round(leg.km * 3), tripIndex === 2 && index === plan.length - 1);
+  });
+}
+
+function mockTripStart(date: string, tripIndex: number): Date {
+  return new Date(`${date}T${String(7 + tripIndex * 4).padStart(2, '0')}:10:00+05:30`);
+}
+
+export function mockAuditDay(vehicleNumber: string, date: string) {
+  const plate = vehicleNumber.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+
+  // Sundays off, so the "did not work" state is reachable without guessing a
+  // date. Anything shorter than a plate is a typo, not a vehicle.
+  const worked = plate.length >= 9 && new Date(`${date}T00:00:00Z`).getUTCDay() !== 0;
+  const trips = worked ? [0, 1, 2].map((index) => mockAuditTrip(date, index)) : [];
+
+  const totalled = (pick: (trip: ReturnType<typeof mockAuditTrip>) => number) =>
+    trips.reduce((total, trip) => total + pick(trip), 0);
+
+  return {
+    vehicle: { id: `veh_${plate.toLowerCase()}`, registrationNumber: plate },
+    date,
+    totalVerifiedKm: Number(totalled((trip) => trip.verifiedKm).toFixed(1)),
+    totalEarnings: asMoney(totalled((trip) => Number(trip.earnings)).toFixed(2)),
+    totalCharge: asMoney(totalled((trip) => trip.charge).toFixed(4)),
+    trips: trips.map(({ charge: _charge, ...trip }) => trip),
+  };
+}
+
+function mockAuditTrip(date: string, index: number) {
+  const startedAt = mockTripStart(date, index);
+  const legs = mockTripLegs(index, startedAt);
+  const cleared = legs.filter((leg) => leg.state === 'BILLABLE');
+  const held = legs.length - cleared.length;
+
+  const byZone = new Map<AuditZone, { km: number; earnings: number }>();
+  for (const leg of cleared) {
+    const running = byZone.get(leg.zone) ?? { km: 0, earnings: 0 };
+    byZone.set(leg.zone, {
+      km: running.km + leg.distanceKm,
+      earnings: running.earnings + Number(leg.driverEarning),
+    });
+  }
+
+  return {
+    id: `trip_${date}_${index + 1}`,
+    sequence: index + 1,
+    startedAt: startedAt.toISOString(),
+    endedAt: legs.at(-1)?.endedAt ?? startedAt.toISOString(),
+    verifiedKm: Number(cleared.reduce((km, leg) => km + leg.distanceKm, 0).toFixed(1)),
+    earnings: asMoney(
+      cleared.reduce((total, leg) => total + Number(leg.driverEarning), 0).toFixed(2),
+    ),
+    status: held > 0 ? ('pending_review' as const) : ('verified' as const),
+    charge: cleared.reduce((total, leg) => total + Number(leg.advertiserCharge), 0),
+    zoneBreakdown: [...byZone].map(([zone, totals]) => ({
+      zone,
+      km: Number(totals.km.toFixed(1)),
+      earnings: asMoney(totals.earnings.toFixed(2)),
+    })),
+  };
+}
+
+/** The id encodes the day and position, so a trip can be rebuilt from it alone. */
+export function mockTripDetail(tripId: string) {
+  const [, date = '', position = '1'] = tripId.split('_');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const index = Number(position) - 1;
+  const legs = mockTripLegs(index, mockTripStart(date, index));
+
+  return {
+    id: tripId,
+    vehicleRegistration: 'KA01AB1234',
+    campaignName: 'Zephyr Summer Sale',
+    driverName: ['Rahul Kumar', 'Priya Nair', 'Imran Shaikh'][index % 3] ?? 'Rahul Kumar',
+    startedAt: mockTripStart(date, index).toISOString(),
+    endedAt: legs.at(-1)?.endedAt ?? null,
+    distanceKm: Number(
+      legs
+        .filter((leg) => leg.state === 'BILLABLE')
+        .reduce((km, leg) => km + leg.distanceKm, 0)
+        .toFixed(1),
+    ),
+    advertiserCharge: asMoney(
+      legs.reduce((total, leg) => total + Number(leg.advertiserCharge), 0).toFixed(4),
+    ),
+    driverEarning: asMoney(
+      legs.reduce((total, leg) => total + Number(leg.driverEarning), 0).toFixed(2),
+    ),
+    legs,
+  };
+}
 
 export const mockVehicles = Array.from({ length: 12 }, (_, i) => ({
   id: `veh_${i + 1}`,

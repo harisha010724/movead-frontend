@@ -9,6 +9,7 @@ import type {
   AdminDriverDetail,
   Assignment,
   AssignmentSummary,
+  AuditDay,
   Campaign,
   DriverCampaign,
   DriverProfile,
@@ -21,6 +22,7 @@ import type {
   Paginated,
   RateCard,
   SpendBreakdown,
+  TripDetail,
   VehicleAvailability,
   ZoneBreakdown,
 } from '@/shared/types/domain';
@@ -158,13 +160,26 @@ export function useAdminDashboard(range: DateRange) {
 /**
  * Live positions are served from Redis, never from the GPS points table.
  * Polling stops when the tab is backgrounded — see `freshness.live`.
+ *
+ * `vehicleNumber` filters on the server rather than in the component. The
+ * fleet is unbounded and the whole of it arrives every ten seconds, so
+ * narrowing to one plate has to narrow the response too, not just what is
+ * drawn from it. It is part of the key for the same reason: two searches are
+ * two different answers and must not share a cache entry.
  */
-export function useLivePositions(campaignId: string | null) {
+export function useLivePositions(campaignId: string | null, vehicleNumber: string | null = null) {
+  const search = vehicleNumber?.trim() ?? '';
+
   return useQuery({
-    queryKey: queryKeys.vehicles.livePositions(campaignId),
+    queryKey: queryKeys.vehicles.livePositions(campaignId, search || null),
     queryFn: () =>
       api.get<{ items: LivePosition[]; updatedAt: string }>('/v1/vehicles/live-positions', {
-        query: { campaignId: campaignId ?? undefined },
+        query: {
+          campaignId: campaignId ?? undefined,
+          // The server requires at least two characters, and one character is
+          // too broad to be worth a round trip anyway.
+          vehicleNumber: search.length >= 2 ? search : undefined,
+        },
       }),
     ...freshness.live,
   });
@@ -315,6 +330,33 @@ export function useDriverDetail(driverId: string | undefined) {
     queryKey: queryKeys.drivers.detail(driverId ?? ''),
     queryFn: () => api.get<AdminDriverDetail>(`/v1/admin/drivers/${driverId ?? ''}`),
     enabled: Boolean(driverId),
+  });
+}
+
+/**
+ * AC-25 — one day of a vehicle's trips, found by the plate a dispute names.
+ *
+ * Reference freshness: the day being audited is one that has already been
+ * billed, so it does not change while it is being read, and an operator
+ * flicking between trips should not re-fetch the list each time.
+ */
+export function useGpsAuditTrips(vehicleNumber: string, date: string) {
+  return useQuery({
+    queryKey: queryKeys.gpsAudit.trips(vehicleNumber, date),
+    queryFn: () =>
+      api.get<AuditDay>('/v1/admin/gps-audit/trips', { query: { vehicleNumber, date } }),
+    enabled: Boolean(vehicleNumber && date),
+    ...freshness.reference,
+  });
+}
+
+/** One of those trips, with the zone splits and rates behind its charge. */
+export function useGpsAuditTrip(tripId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.gpsAudit.trip(tripId ?? ''),
+    queryFn: () => api.get<TripDetail>(`/v1/admin/gps-audit/trips/${tripId ?? ''}`),
+    enabled: Boolean(tripId),
+    ...freshness.reference,
   });
 }
 

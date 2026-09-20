@@ -1,7 +1,7 @@
 export { Button } from './Button';
 export { Card, CardHeader, CardBody, CardFooter } from './Card';
 export { Badge, ZoneBadge, CampaignStatusBadge, LiveStateBadge } from './Badge';
-export { liveStateDot, liveStateLabel } from './liveState';
+export { liveStateDot, liveStateLabel, liveStateMarker } from './liveState';
 export { Spinner, FullPageSpinner } from './Spinner';
 export { Skeleton, SkeletonStatCards, SkeletonTable } from './Skeleton';
 export { EmptyState } from './EmptyState';

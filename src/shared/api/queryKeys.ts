@@ -44,8 +44,8 @@ export const queryKeys = {
     all: () => ['vehicles'] as const,
     list: (filters?: Record<string, unknown>) => ['vehicles', 'list', filters ?? {}] as const,
     detail: (id: string) => ['vehicles', 'detail', id] as const,
-    livePositions: (campaignId: string | null) =>
-      ['vehicles', 'live-positions', campaignId] as const,
+    livePositions: (campaignId: string | null, vehicleNumber: string | null) =>
+      ['vehicles', 'live-positions', campaignId, vehicleNumber] as const,
     inZones: (vehicleType: string, city: string, polygons: unknown) =>
       ['vehicles', 'in-zones', vehicleType, city, polygons] as const,
     available: (vehicleType?: string) =>
@@ -73,7 +73,9 @@ export const queryKeys = {
   },
 
   gpsAudit: {
-    trips: (vehicleId: string, date: string) => ['gps-audit', vehicleId, date] as const,
+    /** Keyed on the plate, because the plate is what a dispute arrives with. */
+    trips: (vehicleNumber: string, date: string) =>
+      ['gps-audit', vehicleNumber, date] as const,
     trip: (tripId: string) => ['gps-audit', 'trip', tripId] as const,
   },
 
