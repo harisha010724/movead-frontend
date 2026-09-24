@@ -84,7 +84,17 @@ export default function CampaignsPage() {
                   return (
                     <TR key={c.id}>
                       <TD>
-                        <span className="font-medium text-slate-900">{c.name}</span>
+                        {/*
+                          The name is the link rather than the whole row: the
+                          row ends in a menu button, and a row-level handler
+                          would swallow it or fire behind it.
+                        */}
+                        <Link
+                          to={`/campaigns/${c.id}`}
+                          className="focus-visible:ring-brand-500/40 rounded font-medium text-slate-900 hover:text-brand-600 hover:underline focus-visible:ring-2 focus-visible:outline-none"
+                        >
+                          {c.name}
+                        </Link>
                         <span className="block text-xs text-slate-500">
                           {c.brandName} · {c.city} · {c.vehicleType === 'AUTO' ? 'Auto' : 'Cab'}
                         </span>

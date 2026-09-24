@@ -26,6 +26,7 @@ const AcceptInvitationPage = lazyPage(() => import('./pages/AcceptInvitationPage
 const DashboardPage = lazyPage(() => import('./pages/DashboardPage'));
 const CampaignsPage = lazyPage(() => import('./pages/CampaignsPage'));
 const CampaignCreatePage = lazyPage(() => import('./pages/CampaignCreatePage'));
+const CampaignDetailPage = lazyPage(() => import('./pages/CampaignDetailPage'));
 const LiveTrackingPage = lazyPage(() => import('./pages/LiveTrackingPage'));
 const VehiclesPage = lazyPage(() => import('./pages/VehiclesPage'));
 const ReportsPage = lazyPage(() => import('./pages/ReportsPage'));
@@ -130,6 +131,18 @@ export function AdvertiserApp() {
           element={
             <RequirePermission permission={PERMISSIONS.campaignCreate}>
               <CampaignCreatePage />
+            </RequirePermission>
+          }
+        />
+        {/*
+          After `campaigns/new` so the literal reads first, though the router
+          would rank it ahead of this pattern either way.
+        */}
+        <Route
+          path="campaigns/:campaignId"
+          element={
+            <RequirePermission permission={PERMISSIONS.campaignRead}>
+              <CampaignDetailPage />
             </RequirePermission>
           }
         />

@@ -11,6 +11,8 @@ import type {
   AssignmentSummary,
   AuditDay,
   Campaign,
+  CampaignDayImpressions,
+  CampaignImpressions,
   DriverCampaign,
   DriverProfile,
   EligibilityCheck,
@@ -65,6 +67,44 @@ export function useCampaign(id: string | undefined) {
     queryKey: queryKeys.campaigns.detail(id ?? ''),
     queryFn: () => api.get<Campaign>(`/v1/campaigns/${id}`),
     enabled: Boolean(id),
+    ...freshness.reference,
+  });
+}
+
+/**
+ * The campaign's whole run, as an audience.
+ *
+ * `aggregate` rather than `reference`: yesterday's figures are settled, but a
+ * campaign still on the road gains a day every night and gains today's driving
+ * as the worker catches up, and an advertiser watching a live campaign should
+ * not have to reload the tab to see it.
+ */
+export function useCampaignImpressions(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.impressions(id ?? ''),
+    queryFn: () => api.get<CampaignImpressions>(`/v1/campaigns/${id ?? ''}/impressions`),
+    enabled: Boolean(id),
+    ...freshness.aggregate,
+  });
+}
+
+/**
+ * One day of it, with the model's working shown.
+ *
+ * `reference` freshness, and that is a property of the service rather than a
+ * guess: a figure is never revised in place once computed, because an
+ * advertiser who read one number on Monday and a different one on Tuesday for
+ * driving that finished on Sunday has been given a reason to distrust both.
+ * Re-expressing history is a new model version, not a silent update.
+ */
+export function useCampaignDayImpressions(id: string | undefined, date: string | null) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.dayImpressions(id ?? '', date ?? ''),
+    queryFn: () =>
+      api.get<CampaignDayImpressions>(
+        `/v1/campaigns/${id ?? ''}/impressions/days/${date ?? ''}`,
+      ),
+    enabled: Boolean(id && date),
     ...freshness.reference,
   });
 }

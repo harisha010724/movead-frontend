@@ -12,6 +12,7 @@ export { StatCard, type StatTone } from './StatCard';
 export { Table, THead, TBody, TR, TH, TD } from './Table';
 export { PageHeader } from './PageHeader';
 export { ZoneBreakdownBar } from './ZoneBreakdownBar';
+export { BaselineMixBar } from './BaselineMixBar';
 export { ViewAllLink } from './ViewAllLink';
 export { LiveMapPanel, type VehicleStatusCount } from './LiveMapPanel';
 export { FleetStatusBar } from './FleetStatusBar';

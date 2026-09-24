@@ -408,6 +408,80 @@ export interface TripDetail {
   legs: TripLeg[];
 }
 
+// --- Impressions ---------------------------------------------------------
+
+/**
+ * A campaign's driving, expressed as an audience.
+ *
+ * Every shape here is advertiser-scoped and carries no driver identity and no
+ * driver earning — the admin audit of the same segments carries both, which is
+ * why it sits behind its own permission. Keep the two apart: a field added
+ * here that names a driver undoes that separation silently.
+ *
+ * `verifiedKm` is GPS-provable and is what the contract is denominated in.
+ * `impressions` is the media translation of it and is a model output, which is
+ * why `modelVersion` and `baselineMix` travel with it everywhere. A modelled
+ * figure shown without either is indistinguishable from an invented one.
+ */
+export interface ZoneImpressions {
+  zone: ZoneKey;
+  verifiedKm: number;
+  impressions: number;
+  charge: Money;
+}
+
+export interface DayImpressions {
+  date: string;
+  verifiedKm: number;
+  impressions: number;
+}
+
+/** Shares of the impressions, summing to one. */
+export interface BaselineMix {
+  /** Rests on measurement of that road in that hour of the week. */
+  cellHour: number;
+  /** Rests on measurement of that road across the whole week. */
+  cell: number;
+  /** Rests on a flat per-zone assumption, because the road is barely driven. */
+  zoneDefault: number;
+}
+
+export interface ImpressionTotals {
+  modelVersion: string;
+  verifiedKm: number;
+  impressions: number;
+  charge: Money;
+  /** Cost per thousand — the figure that compares to other media. */
+  cpm: Money;
+  byZone: ZoneImpressions[];
+  /** Oldest first. Days with no billable driving are absent, not zeroed. */
+  byDay: DayImpressions[];
+  baselineMix: BaselineMix;
+}
+
+export interface CampaignImpressions extends ImpressionTotals {
+  campaignId: string;
+  campaignName: string;
+}
+
+/** Every coefficient the model multiplied, so the arithmetic can be repeated. */
+export interface ImpressionWorking {
+  jamDensity: number;
+  occupantsPerVehicle: number;
+  lineOfSightShare: number;
+  wrapQuality: number;
+  zones: { zone: ZoneKey; lanes: number; pedestrianDensity: number }[];
+  /** Null on a day whose segments have not been priced into impressions yet. */
+  medianObservedKmh: number | null;
+  medianBaselineKmh: number | null;
+}
+
+export interface CampaignDayImpressions extends ImpressionTotals {
+  campaignId: string;
+  date: string;
+  working: ImpressionWorking;
+}
+
 export interface Paginated<T> {
   items: T[];
   page: number;

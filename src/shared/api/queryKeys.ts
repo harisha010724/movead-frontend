@@ -25,6 +25,10 @@ export const queryKeys = {
       ['campaigns', 'admin', filters ?? {}] as const,
     zones: (id: string) => ['campaigns', id, 'zones'] as const,
     assignments: (id: string) => ['campaigns', id, 'assignments'] as const,
+    impressions: (id: string) => ['campaigns', id, 'impressions'] as const,
+    /** Under the campaign's impressions, so one prefix drops both. */
+    dayImpressions: (id: string, date: string) =>
+      ['campaigns', id, 'impressions', 'day', date] as const,
   },
 
   installations: {
