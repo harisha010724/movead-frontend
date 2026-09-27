@@ -355,6 +355,14 @@ export type SegmentState = 'BILLABLE' | 'PENDING_REVIEW' | 'NON_BILLABLE';
 /** Lowercase on the wire, unlike `ZoneTier`, which is how the badge wants it. */
 export type ZoneKey = 'prime' | 'secondary' | 'network';
 
+/**
+ * One drive, not one shift.
+ *
+ * A tracking session runs from the driver's press of Start to their press of
+ * Stop and can hold a whole morning; the server cuts it at the stops in it, so
+ * a trip here is a journey between two of them. `id` names the drive and is
+ * what the trip detail endpoint takes.
+ */
 export interface AuditTrip {
   id: string;
   sequence: number;
@@ -363,6 +371,11 @@ export interface AuditTrip {
   verifiedKm: number;
   earnings: Money;
   status: TripStatus;
+  /**
+   * How long the vehicle stood still before this drive. Null when it opened a
+   * shift, where the hours before it were the driver's own time.
+   */
+  idleSecondsBefore: number | null;
   zoneBreakdown: { zone: ZoneKey; km: number; earnings: Money }[] | null;
 }
 

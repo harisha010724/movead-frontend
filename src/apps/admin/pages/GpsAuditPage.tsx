@@ -2,7 +2,14 @@ import { useState, type FormEvent } from 'react';
 import { AlertTriangle, Route, Search } from 'lucide-react';
 import { Page } from '@/shared/layout/Page';
 import { useGpsAuditTrip, useGpsAuditTrips } from '@/shared/api/hooks';
-import { formatINR, formatKm, formatRate, formatRegistration, formatTime } from '@/shared/format';
+import {
+  formatDuration,
+  formatINR,
+  formatKm,
+  formatRate,
+  formatRegistration,
+  formatTime,
+} from '@/shared/format';
 import { TripRouteMap } from '@/shared/maps/TripRouteMap';
 import type { AuditTrip, TripLeg } from '@/shared/types/domain';
 import {
@@ -169,7 +176,7 @@ export default function GpsAuditPage() {
                   </Card>
 
                   <Card className="self-start">
-                    <CardHeader title="Trips" description="Sessions recorded on this date" />
+                    <CardHeader title="Trips" description="Drives recorded on this date" />
                     <CardBody className="space-y-2">
                       {loaded.trips.map((item) => (
                         <TripButton
@@ -268,6 +275,14 @@ function TripButton({
           ))}
         </div>
       ) : null}
+      {/* Why the shift shows as two drives rather than one, and the figure an
+          operator needs when a driver disputes an hour they were not paid
+          for: the stop between them, and how long it lasted. */}
+      {trip.idleSecondsBefore === null ? null : (
+        <div className="numeric mt-2 text-[11px] text-slate-500">
+          Parked {formatDuration(trip.idleSecondsBefore)} before this drive
+        </div>
+      )}
     </button>
   );
 }

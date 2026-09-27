@@ -550,7 +550,17 @@ export function mockAuditDay(vehicleNumber: string, date: string) {
     totalVerifiedKm: Number(totalled((trip) => trip.verifiedKm).toFixed(1)),
     totalEarnings: asMoney(totalled((trip) => Number(trip.earnings)).toFixed(2)),
     totalCharge: asMoney(totalled((trip) => trip.charge).toFixed(4)),
-    trips: trips.map(({ charge: _charge, ...trip }) => trip),
+    /* The three drives are one shift, uploaded without the driver pressing
+       Stop between them, so every one but the first waited out a stop. */
+    trips: trips.map(({ charge: _charge, ...trip }, index) => {
+      const previous = trips[index - 1];
+      return {
+        ...trip,
+        idleSecondsBefore: previous
+          ? Math.round((Date.parse(trip.startedAt) - Date.parse(previous.endedAt)) / 1000)
+          : null,
+      };
+    }),
   };
 }
 

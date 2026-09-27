@@ -51,6 +51,7 @@ const DAY = {
       verifiedKm: 14.2,
       earnings: '120.00',
       status: 'verified',
+      idleSecondsBefore: null,
       zoneBreakdown: [{ zone: 'prime', km: 14.2, earnings: '120.00' }],
     },
     {
@@ -61,6 +62,8 @@ const DAY = {
       verifiedKm: 10.4,
       earnings: '64.80',
       status: 'pending_review',
+      // 04:40 to 08:10: the vehicle stood still for three and a half hours.
+      idleSecondsBefore: 3.5 * 3600,
       zoneBreakdown: null,
     },
   ],
@@ -178,6 +181,21 @@ describe('the GPS audit screen', () => {
     expect(await screen.findByRole('button', { name: /trip 1/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /trip 2/i })).toBeInTheDocument();
     expect(screen.getByText('In review')).toBeInTheDocument();
+  });
+
+  /*
+   * A shift arrives cut into drives, and the operator has to be able to see
+   * where the cuts came from. The stop is the answer to both "why is this two
+   * rows?" and "what was the driver doing between them?".
+   */
+  it('says how long the vehicle was parked before a drive', async () => {
+    renderPage();
+    searchFor('KA01AB1234');
+
+    expect(await screen.findByText(/parked 3 h 30 min before this drive/i)).toBeInTheDocument();
+
+    const first = screen.getByRole('button', { name: /trip 1/i });
+    expect(first).not.toHaveTextContent(/parked/i);
   });
 
   it('does not fetch a trip until one is chosen', async () => {

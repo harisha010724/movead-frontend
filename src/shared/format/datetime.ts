@@ -72,6 +72,25 @@ export function formatDateRange(
   return `${sameYear ? dayMonth.format(start) : date.format(start)} – ${date.format(end)}`;
 }
 
+/**
+ * A span of time as a quantity — `28 min`, `1 h 35 min`, `2 h`.
+ *
+ * Distinct from `formatRelative`, which dates a moment against now. This
+ * describes a length: how long a vehicle stood still between two drives, where
+ * a clock face like `00:28:00` would make the reader count digits.
+ */
+export function formatDuration(totalSeconds: number): string {
+  const safe = Math.max(0, Math.round(totalSeconds));
+  if (safe < 60) return `${safe} sec`;
+
+  const minutes = Math.round(safe / 60);
+  if (minutes < 60) return `${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
 /** Relative age, used for "last updated" on live views. */
 export function formatRelative(v: string | Date | null | undefined): string {
   const d = parse(v);

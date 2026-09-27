@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatINR, formatINRCompact, formatRate } from './money';
 import { formatKm, formatPercent, formatSignedPercent } from './units';
-import { formatDate, formatDateTime } from './datetime';
+import { formatDate, formatDateTime, formatDuration } from './datetime';
 
 describe('money formatting', () => {
   it('uses Indian lakh grouping rather than thousands grouping', () => {
@@ -63,5 +63,15 @@ describe('date formatting', () => {
   it('renders a dash for missing dates', () => {
     expect(formatDate(null)).toBe('—');
     expect(formatDate('nonsense')).toBe('—');
+  });
+
+  /* A length of time, not a moment — how long a vehicle stood still. */
+  it('spells out a duration to the nearest minute', () => {
+    expect(formatDuration(45)).toBe('45 sec');
+    expect(formatDuration(119)).toBe('2 min');
+    expect(formatDuration(28 * 60)).toBe('28 min');
+    expect(formatDuration(7200)).toBe('2 h');
+    expect(formatDuration(3.5 * 3600)).toBe('3 h 30 min');
+    expect(formatDuration(-5)).toBe('0 sec');
   });
 });
