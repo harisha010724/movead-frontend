@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addIsoDays, compareIsoDates, monthGrid } from './civilDate';
+import { addIsoDays, campaignDateHasLapsed, compareIsoDates, monthGrid } from './civilDate';
 
 describe('civilDate', () => {
   it('adds days across a month boundary', () => {
@@ -10,6 +10,11 @@ describe('civilDate', () => {
   it('compares civil dates as strings of the same form', () => {
     expect(compareIsoDates('2026-08-22', '2026-08-23')).toBe(-1);
     expect(compareIsoDates('2026-08-22', '2026-08-22')).toBe(0);
+  });
+
+  it('treats the last campaign day as inclusive', () => {
+    expect(campaignDateHasLapsed('2026-09-30', '2026-09-30')).toBe(false);
+    expect(campaignDateHasLapsed('2026-09-30', '2026-10-01')).toBe(true);
   });
 
   it('starts a month grid on Sunday and covers six weeks', () => {

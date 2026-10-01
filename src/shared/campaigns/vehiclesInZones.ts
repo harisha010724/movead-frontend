@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { formatDate, formatRegistration } from '@/shared/format';
-import { addIsoDays } from '@/shared/lib/civilDate';
+import { addIsoDays, campaignDateHasLapsed } from '@/shared/lib/civilDate';
 import { ZONE_MAP_COLORS } from '@/shared/maps/zoneColors';
 import type { ZonePolygons, ZoneTier } from '@/shared/maps/types';
 import type { VehicleAvailability } from '@/shared/types/domain';
@@ -104,12 +104,19 @@ export function useVehiclesInZones(
 ) {
   return useQuery({
     queryKey: queryKeys.vehicles.inZones(vehicleType, city, polygons),
-    queryFn: () =>
-      api.post<AvailableVehiclesResponse>(endpoint, {
+    queryFn: async () => {
+      const data = await api.post<AvailableVehiclesResponse>(endpoint, {
         vehicleType,
         city,
         zonePolygons: polygons ?? {},
-      }),
+      });
+      const items = data.items.map(releaseIfCampaignLapsed);
+      return {
+        ...data,
+        items,
+        availableCount: items.filter((row) => row.availability === 'available').length,
+      };
+    },
     // A city is the one thing the list cannot be built without: it is what
     // scopes the fleet, and the form asks for it before this card is reached.
     enabled: Boolean(city),
@@ -142,6 +149,19 @@ export function areaLabel(row: AvailableVehicle): string {
  * answer is available and worth giving: it turns a dead end into a plan
  * (AC-22.4c).
  */
+/**
+ * A live assignment on a campaign whose last day has passed is not a booking.
+ * The API should already drop it; this keeps the picker honest if a stale
+ * payload still carries yesterday's end date.
+ */
+export function releaseIfCampaignLapsed<
+  T extends { availability: VehicleAvailability; bookedUntil?: string },
+>(row: T): T {
+  if (row.availability !== 'booked' || !row.bookedUntil) return row;
+  if (!campaignDateHasLapsed(row.bookedUntil)) return row;
+  return { ...row, availability: 'available', bookedUntil: undefined };
+}
+
 export function unavailableReason(row: AvailableVehicle): string {
   const state = AVAILABILITY[row.availability];
   if (row.availability !== 'booked' || !row.bookedUntil) return state.why;

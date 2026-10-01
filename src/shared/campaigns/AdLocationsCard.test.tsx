@@ -45,7 +45,7 @@ function booked(overrides: Partial<AvailableVehicle> = {}): AvailableVehicle {
   return vehicle({
     status: 'ACTIVE',
     availability: 'booked',
-    bookedUntil: '2026-09-30',
+    bookedUntil: '2026-12-31',
     ...overrides,
   });
 }
@@ -187,7 +187,7 @@ describe('the vehicle picker', () => {
     await screen.findByText(PLATE);
     expect(
       within(rowFor(PLATE)).getByText(
-        `On a campaign until ${formatDate('2026-09-30')} — free from ${formatDate('2026-10-01')}`,
+        `On a campaign until ${formatDate('2026-12-31')} — free from ${formatDate('2027-01-01')}`,
       ),
     ).toBeInTheDocument();
   });

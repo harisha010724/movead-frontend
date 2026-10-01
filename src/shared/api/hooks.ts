@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/shared/auth/useAuth';
 import type { Portal } from '@/shared/auth/portals';
+import { releaseIfCampaignLapsed } from '@/shared/campaigns/vehiclesInZones';
 import { api } from './client';
 import { freshness } from './queryClient';
 import { queryKeys, type DateRange } from './queryKeys';
@@ -338,11 +339,15 @@ export interface AvailableFleetVehicle {
 export function useAvailableFleet(vehicleType?: 'CAB' | 'AUTO') {
   return useQuery({
     queryKey: queryKeys.vehicles.available(vehicleType),
-    queryFn: () =>
-      api.get<{ items: AvailableFleetVehicle[]; cabCount: number; autoCount: number }>(
-        '/v1/vehicles/available',
-        { query: vehicleType ? { vehicleType } : {} },
-      ),
+    queryFn: async () => {
+      const data = await api.get<{
+        items: AvailableFleetVehicle[];
+        cabCount: number;
+        autoCount: number;
+      }>('/v1/vehicles/available', { query: vehicleType ? { vehicleType } : {} });
+      const items = data.items.map(releaseIfCampaignLapsed);
+      return { ...data, items };
+    },
     ...freshness.reference,
   });
 }

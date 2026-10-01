@@ -30,6 +30,14 @@ export function compareIsoDates(a: string, b: string): number {
   return a < b ? -1 : 1;
 }
 
+/**
+ * The last campaign day is inclusive. After that Indian date the vehicle is
+ * free even if nobody has pressed Complete.
+ */
+export function campaignDateHasLapsed(endDate: string, today: string = platformTodayIso()): boolean {
+  return compareIsoDates(today, endDate.slice(0, 10)) > 0;
+}
+
 /** Six weeks of civil days covering `year`/`month` (0-11), starting on Sunday. */
 export function monthGrid(year: number, month: number): string[] {
   const first = new Date(Date.UTC(year, month, 1));
