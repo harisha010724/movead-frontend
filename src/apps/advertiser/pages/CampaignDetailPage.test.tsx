@@ -216,7 +216,7 @@ const OLDER_TRIP = {
 const STATUS_COUNTS = { all: 2, verified: 2, pending_review: 0, rejected: 0 };
 
 function tripsPage(
-  trips: typeof NEW_TRIP[],
+  trips: Array<(typeof NEW_TRIP) | (typeof OLD_TRIP) | (typeof OLDER_TRIP)>,
   extra: Record<string, unknown> = {},
 ) {
   return {

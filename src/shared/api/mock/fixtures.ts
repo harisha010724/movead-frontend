@@ -9,7 +9,7 @@
  */
 
 import { zoneForPoint } from '@/shared/maps/geo';
-import { asMoney, type DriverCampaign, type DriverProfile } from '@/shared/types/domain';
+import { asMoney, type DriverCampaign, type DriverProfile, type TripStatus } from '@/shared/types/domain';
 
 /**
  * `GET /v1/auth/me`, mocked. The field names are the API's, `audience` included
@@ -614,7 +614,7 @@ function mockCampaignTripRow(date: string, index: number) {
     endedAt: listed.endedAt,
     verifiedKm: listed.verifiedKm,
     charge: asMoney(listed.charge.toFixed(2)),
-    status: listed.status,
+    status: listed.status as TripStatus,
     idleSecondsBefore: index === 0 ? null : 18 * 60,
     impressions: Math.round(listed.verifiedKm * 28),
   };
