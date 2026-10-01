@@ -152,7 +152,7 @@ const unauthenticated = (message = 'Sign in to continue.') =>
  * see it here too, or mock mode reviews a screen the backend will not serve.
  */
 type Handler = (body: unknown, query: URLSearchParams) => Response;
-type ParamHandler = (id: string, body: unknown) => Response;
+type ParamHandler = (id: string, body: unknown, query?: URLSearchParams) => Response;
 
 const handlers: Record<string, Handler> = {
   'GET /v1/auth/me': () => {
@@ -581,6 +581,51 @@ const paramHandlers: Record<string, ParamHandler> = {
     return trip ? json(trip) : json({ code: 'not_found', message: 'No such trip.' }, 404);
   },
 
+  'GET /v1/campaigns/*/visibility': (id) => json(fx.mockCampaignVisibility(id)),
+
+  'GET /v1/campaigns/*/impressions': (id) => json(fx.mockCampaignImpressions(id)),
+
+  /*
+   * Two wildcards; the matcher keeps the last segment, which is the civil day.
+   * The campaign is already implied by the list the advertiser opened from.
+   */
+  'GET /v1/campaigns/*/impressions/days/*': (date) => json(fx.mockCampaignDayImpressions('cmp_01', date)),
+
+  'GET /v1/campaigns/*/drivers': (id, _body, query) => {
+    const limit = Number(query?.get('limit') ?? '');
+    const offset = Number(query?.get('offset') ?? '');
+    return json(
+      fx.mockCampaignRoster(id, {
+        q: query?.get('q'),
+        ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
+        ...(Number.isFinite(offset) && offset >= 0 ? { offset } : {}),
+      }),
+    );
+  },
+
+  'GET /v1/campaigns/*/trips': (id, _body, query) => {
+    const limit = Number(query?.get('limit') ?? '');
+    const offset = Number(query?.get('offset') ?? '');
+    return json(
+      fx.mockCampaignTrips(id, query?.get('driverId'), {
+        before: query?.get('before'),
+        q: query?.get('q'),
+        status: query?.get('status'),
+        ...(Number.isFinite(limit) && limit > 0 ? { limit } : {}),
+        ...(Number.isFinite(offset) && offset >= 0 ? { offset } : {}),
+      }),
+    );
+  },
+
+  /*
+   * Two wildcards; the matcher keeps the last segment, which is the trip id.
+   * The campaign is already implied by the list the advertiser opened from.
+   */
+  'GET /v1/campaigns/*/trips/*': (tripId) => {
+    const trip = fx.mockCampaignTripDetail(tripId);
+    return trip ? json(trip) : json({ code: 'not_found', message: 'No such trip.' }, 404);
+  },
+
   'POST /v1/admin/documents/*/verify': (id) => {
     const item = fx.decideMockDocument(id, 'verified', null);
     return item ? json(item) : json({ code: 'not_found', message: 'No such document.' }, 404);
@@ -788,7 +833,7 @@ export async function mockFetch(
   if (handler) return handler(body, query);
 
   const parameterised = matchParamHandler(method, pathname);
-  if (parameterised) return parameterised.handler(parameterised.id, body);
+  if (parameterised) return parameterised.handler(parameterised.id, body, query);
 
   return notFound(`${method} ${pathname}`);
 }

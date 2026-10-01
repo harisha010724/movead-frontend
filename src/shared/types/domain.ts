@@ -421,6 +421,162 @@ export interface TripDetail {
   legs: TripLeg[];
 }
 
+/**
+ * One drive recorded while carrying an advertiser's campaign.
+ *
+ * Driver money is not here. Names are, so the advertiser can pick whose trips
+ * to open — the same names the vehicles table already shows.
+ */
+export interface CampaignDriver {
+  id: string;
+  name: string;
+}
+
+export interface CampaignRosterDriver {
+  id: string;
+  name: string;
+  vehicleRegistration: string | null;
+  area: string | null;
+  verifiedKm: number;
+  state: LiveVehicleState | null;
+}
+
+export interface CampaignRoster {
+  drivers: CampaignRosterDriver[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface CampaignTrip {
+  id: string;
+  vehicleRegistration: string;
+  startedAt: string;
+  endedAt: string;
+  verifiedKm: number;
+  charge: Money;
+  status: TripStatus;
+  idleSecondsBefore: number | null;
+  /** Modelled opportunities-to-see on the billed hops. Not a people count. */
+  impressions: number;
+}
+
+export interface CampaignTripStatusCounts {
+  all: number;
+  verified: number;
+  pending_review: number;
+  rejected: number;
+}
+
+export interface CampaignTrips {
+  drivers: CampaignDriver[];
+  trips: CampaignTrip[];
+  total: number;
+  limit: number;
+  offset: number;
+  statusCounts: CampaignTripStatusCounts;
+  nextBefore: string | null;
+}
+
+/** How readable the wrap was on a stretch, from GPS speed. Not a billing input. */
+export type VisibilityBand = 'high' | 'medium' | 'low';
+
+/** The priced ground under a campaign trip, without the driver's side of it. */
+export interface CampaignTripLeg {
+  zone: ZoneKey;
+  state: SegmentState;
+  flagReason: string | null;
+  startedAt: string;
+  endedAt: string;
+  distanceKm: number;
+  advertiserRate: Money;
+  advertiserCharge: Money;
+  segments: number;
+  visibility: VisibilityBand | null;
+  path: { lat: number; lng: number }[];
+}
+
+/** Where readable driving sat still. Junction until a map feature names it. */
+export type VisibilityPlaceKind = 'signal' | 'mall' | 'transit' | 'residential' | 'junction';
+
+export const VISIBILITY_PLACE_LABEL: Record<VisibilityPlaceKind, string> = {
+  signal: 'Traffic signal',
+  mall: 'Mall / retail',
+  transit: 'Transit',
+  residential: 'Residential',
+  junction: 'Junction',
+};
+
+export interface VisibilityPlace {
+  kind: VisibilityPlaceKind;
+  name: string;
+  lat: number;
+  lng: number;
+  km: number;
+  seconds: number;
+  visits: number;
+  source: 'gps' | 'osm';
+}
+
+export interface VisibilityKindTotal {
+  kind: VisibilityPlaceKind;
+  km: number;
+  count: number;
+}
+
+/**
+ * A campaign's billable kilometres, banded by how readable the wrap was.
+ *
+ * `classifiedKm` can be smaller than the campaign's verified kilometres:
+ * parked and near-zero stretches are omitted so a night in a depot cannot
+ * become high visibility. Nothing here multiplies a charge.
+ */
+export type VisibilityDaypart = 'morning' | 'midday' | 'evening' | 'night';
+
+export interface CampaignDayparts {
+  version: string;
+  morningKm: number;
+  middayKm: number;
+  eveningKm: number;
+  nightKm: number;
+  readableKm: number;
+  peakShare: number;
+  windows: Record<VisibilityDaypart, string>;
+}
+
+export interface CampaignVisibility {
+  campaignId: string;
+  version: string;
+  highKm: number;
+  mediumKm: number;
+  lowKm: number;
+  classifiedKm: number;
+  highShare: number;
+  bands: { high: string; medium: string; low: string };
+  places: VisibilityPlace[];
+  byKind: VisibilityKindTotal[];
+  when: CampaignDayparts;
+}
+
+export interface CampaignTripDetail {
+  id: string;
+  vehicleRegistration: string;
+  startedAt: string;
+  endedAt: string | null;
+  distanceKm: number;
+  advertiserCharge: Money;
+  status: TripStatus;
+  legs: CampaignTripLeg[];
+  places: VisibilityPlace[];
+  parked: CampaignParked | null;
+}
+
+export interface CampaignParked {
+  seconds: number;
+  lat: number;
+  lng: number;
+}
+
 // --- Impressions ---------------------------------------------------------
 
 /**
@@ -493,6 +649,32 @@ export interface CampaignDayImpressions extends ImpressionTotals {
   campaignId: string;
   date: string;
   working: ImpressionWorking;
+}
+
+export type ReportType =
+  | 'proof-pack'
+  | 'billing-statement'
+  | 'zone-summary'
+  | 'vehicle-summary'
+  | 'km-detail';
+
+export type ReportFormat = 'html' | 'csv';
+
+export interface ReportExport {
+  id: string;
+  type: ReportType;
+  format: ReportFormat;
+  campaignId: string;
+  campaignName: string;
+  from: string;
+  to: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  checksum: string;
+  generatedAt: string;
+  expiresAt: string;
+  status: 'ready';
 }
 
 export interface Paginated<T> {

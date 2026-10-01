@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ChevronDown, LifeBuoy, LogOut, Settings, UserRound } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft, ChevronDown, LifeBuoy, LogOut, Settings, UserRound } from 'lucide-react';
 import { useAuth } from '@/shared/auth/useAuth';
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '@/shared/ui';
 import { NotificationBell } from './NotificationBell';
@@ -9,6 +10,8 @@ interface TopBarProps {
   greeting?: string;
   /** Campaign selector, date range picker and similar page-level controls. */
   controls?: ReactNode;
+  backTo?: string;
+  badge?: ReactNode;
   /** @deprecated The bell reads the inbox itself. Kept so existing pages still type-check. */
   notificationCount?: number;
 }
@@ -22,7 +25,7 @@ function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function TopBar({ title, greeting, controls }: TopBarProps) {
+export function TopBar({ title, greeting, controls, backTo, badge }: TopBarProps) {
   const { user, logout } = useAuth();
   const organisation = user?.organisationName ?? '';
 
@@ -38,9 +41,23 @@ export function TopBar({ title, greeting, controls }: TopBarProps) {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-white/70 px-6 py-4 backdrop-blur-xl">
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-900">{title}</h1>
-          {greeting ? <p className="mt-0.5 text-[13px] text-slate-500">{greeting}</p> : null}
+        <div className="flex min-w-0 items-start gap-2.5">
+          {backTo ? (
+            <Link
+              to={backTo}
+              aria-label="Back to campaigns"
+              className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-full text-slate-800 transition-colors hover:bg-slate-100"
+            >
+              <ArrowLeft className="size-5" strokeWidth={2.25} />
+            </Link>
+          ) : null}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-xl font-semibold tracking-tight text-slate-900">{title}</h1>
+              {badge}
+            </div>
+            {greeting ? <p className="mt-0.5 text-[13px] text-slate-500">{greeting}</p> : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

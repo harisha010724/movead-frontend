@@ -51,6 +51,33 @@ export function formatKmWhole(value: number | null | undefined): string {
   return `${int.format(value)} km`;
 }
 
+/**
+ * Average speed from distance and duration — the same formula visibility
+ * uses, never the handset's `speed_mps`. Null when there is no drive to
+ * average: no billed kilometres, or no elapsed time.
+ */
+export function averageKmh(
+  distanceKm: number | null | undefined,
+  seconds: number | null | undefined,
+): number | null {
+  if (
+    distanceKm == null ||
+    seconds == null ||
+    !Number.isFinite(distanceKm) ||
+    !Number.isFinite(seconds) ||
+    distanceKm < 0.001 ||
+    !(seconds > 0)
+  ) {
+    return null;
+  }
+  return distanceKm / (seconds / 3600);
+}
+
+export function formatKmh(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return '—';
+  return `${km1.format(value)} km/h`;
+}
+
 /** Accepts a ratio (0.186), not a pre-multiplied percentage. */
 export function formatPercent(ratio: number | null | undefined): string {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return '—';

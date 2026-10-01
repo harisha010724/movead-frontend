@@ -53,7 +53,8 @@ function isLiveApiPath(path: string): boolean {
     path.startsWith('/v1/invitations/') ||
     path.startsWith('/v1/campaigns') ||
     path.startsWith('/v1/notifications') ||
-    path.startsWith('/v1/vehicles/available')
+    path.startsWith('/v1/vehicles/available') ||
+    path.startsWith('/v1/reports')
   );
 }
 
@@ -139,6 +140,16 @@ async function request<T>(
   return (await response.json()) as T;
 }
 
+function fileNameOf(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const utf = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (utf?.[1]) return decodeURIComponent(utf[1]);
+  const quoted = /filename="([^"]+)"/i.exec(header);
+  if (quoted?.[1]) return quoted[1];
+  const plain = /filename=([^;]+)/i.exec(header);
+  return plain?.[1]?.trim() || fallback;
+}
+
 export const api = {
   get: <T>(path: string, options?: Omit<RequestOptions, 'body'>) =>
     request<T>('GET', path, options),
@@ -149,6 +160,36 @@ export const api = {
   put: <T>(path: string, body?: unknown, options?: RequestOptions) =>
     request<T>('PUT', path, { ...options, body }),
   delete: <T>(path: string, options?: RequestOptions) => request<T>('DELETE', path, options),
+  /**
+   * A file download. The JSON helpers above would parse the bytes as an error
+   * envelope; this keeps them as a blob and reads the filename the server sent.
+   */
+  download: async (
+    path: string,
+    options?: Omit<RequestOptions, 'body'>,
+  ): Promise<{ blob: Blob; fileName: string; contentType: string }> => {
+    const headers: Record<string, string> = { ...authHeaders() };
+    const init: RequestInit = {
+      method: 'GET',
+      headers,
+      credentials: 'include',
+      signal: options?.signal,
+    };
+    const url = buildUrl(path, options?.query);
+    let response: Response;
+    try {
+      response = await fetch(url, init);
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'AbortError') throw cause;
+      throw new NetworkError(cause);
+    }
+    if (!response.ok) throw await parseError(response);
+    return {
+      blob: await response.blob(),
+      fileName: fileNameOf(response.headers.get('content-disposition'), 'download'),
+      contentType: response.headers.get('content-type') ?? 'application/octet-stream',
+    };
+  },
   /**
    * Multipart upload. The browser sets the boundary; do not set Content-Type
    * yourself or the server cannot parse the parts.

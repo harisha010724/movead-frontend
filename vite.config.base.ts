@@ -48,6 +48,18 @@ export function createPortalConfig(portal: PortalName, devPort: number) {
         // admin-only bundle, which is what `adminPath` keys off.
         __PORTAL__: JSON.stringify(portal === 'admin' ? 'admin' : 'advertiser'),
       },
+      /*
+       * Pre-bundle the dashboard's heavy imports at startup.
+       *
+       * Those pages live outside the Vite `root` (`src/apps/web`) and load
+       * through `import()`, so the first login used to discover `recharts`
+       * mid-request. Vite then invalidated the dep cache and answered 504
+       * Outdated Optimize Dep — which React reports as a failed dynamic
+       * import of DashboardPage.
+       */
+      optimizeDeps: {
+        include: ['recharts', 'lucide-react', '@tanstack/react-query', 'react-router-dom'],
+      },
       server: {
         port: devPort,
         strictPort: true,

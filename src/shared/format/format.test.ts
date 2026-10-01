@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatINR, formatINRCompact, formatRate } from './money';
-import { formatKm, formatPercent, formatSignedPercent } from './units';
+import { averageKmh, formatKm, formatKmh, formatPercent, formatSignedPercent } from './units';
 import { formatDate, formatDateTime, formatDuration } from './datetime';
 
 describe('money formatting', () => {
@@ -43,6 +43,14 @@ describe('unit formatting', () => {
   it('shows distance to one decimal place', () => {
     expect(formatKm(62.44)).toBe('62.4 km');
     expect(formatKm(0)).toBe('0.0 km');
+  });
+
+  it('averages speed from distance and duration, never a missing drive', () => {
+    expect(averageKmh(12.4, 52 * 60)).toBeCloseTo(14.3077);
+    expect(formatKmh(14.3077)).toBe('14.3 km/h');
+    expect(averageKmh(0, 100)).toBeNull();
+    expect(averageKmh(12.4, 0)).toBeNull();
+    expect(formatKmh(null)).toBe('—');
   });
 
   it('treats percentages as ratios', () => {

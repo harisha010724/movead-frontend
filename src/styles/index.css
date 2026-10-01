@@ -251,7 +251,7 @@
 
 @layer utilities {
   .skeleton {
-    @apply animate-pulse rounded bg-slate-200;
+    @apply animate-pulse bg-slate-200;
   }
 
   .route-vehicle {

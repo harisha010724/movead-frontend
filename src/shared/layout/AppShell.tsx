@@ -16,7 +16,7 @@ interface AppShellProps {
  */
 export function AppShell({ productName, nav, children, showSupportCard }: AppShellProps) {
   return (
-    <div className="flex min-h-screen bg-canvas">
+    <div className="flex min-h-dvh bg-canvas">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2 focus:shadow"
@@ -30,7 +30,7 @@ export function AppShell({ productName, nav, children, showSupportCard }: AppShe
         {...(showSupportCard !== undefined ? { showSupportCard } : {})}
       />
 
-      <div id="main" className="flex min-w-0 flex-1 flex-col">
+      <div id="main" className="flex min-h-0 min-w-0 flex-1 flex-col">
         {children}
       </div>
     </div>

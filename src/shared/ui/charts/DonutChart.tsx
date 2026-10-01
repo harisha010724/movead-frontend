@@ -6,6 +6,8 @@ import { chartColor } from './palette';
 export interface DonutSlice {
   label: string;
   value: number;
+  /** When set, used instead of the positional palette — e.g. visibility bands. */
+  color?: string;
 }
 
 interface DonutChartProps {
@@ -15,6 +17,8 @@ interface DonutChartProps {
   centreLabel?: string;
   formatValue: (value: number) => string;
   size?: number;
+  /** Centre the ring in the card; the legend sits under it. */
+  align?: 'start' | 'center';
 }
 
 /**
@@ -29,11 +33,18 @@ export function DonutChart({
   centreLabel = 'Total',
   formatValue,
   size = 180,
+  align = 'center',
 }: DonutChartProps) {
   const total = data.reduce((sum, slice) => sum + slice.value, 0);
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
+    <div
+      className={
+        align === 'center'
+          ? 'flex flex-col items-center gap-5'
+          : 'flex flex-wrap items-center gap-4'
+      }
+    >
       <div className="relative shrink-0" style={{ width: size, height: size }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -47,7 +58,7 @@ export function DonutChart({
               stroke="none"
             >
               {data.map((slice, index) => (
-                <Cell key={slice.label} fill={chartColor(index)} />
+                <Cell key={slice.label} fill={slice.color ?? chartColor(index)} />
               ))}
             </Pie>
             <Tooltip
@@ -59,11 +70,12 @@ export function DonutChart({
                 // Resolve the colour from our own palette rather than the
                 // chart internals, so the swatch cannot drift from the slice.
                 const index = data.findIndex((slice) => slice.label === label);
+                const slice = index >= 0 ? data[index] : undefined;
                 return (
                   <ChartTooltipCard
                     rows={[
                       {
-                        color: chartColor(Math.max(index, 0)),
+                        color: slice?.color ?? chartColor(Math.max(index, 0)),
                         label,
                         value: `${formatValue(value)} (${formatPercent(value / (total || 1))})`,
                       },
@@ -87,12 +99,12 @@ export function DonutChart({
         `min-w-40` forces the legend onto its own line rather than crushing the
         labels when the card is narrow — a truncated area name is useless.
       */}
-      <dl className="min-w-40 flex-1 space-y-1.5">
+      <dl className={align === 'center' ? 'w-full max-w-xs space-y-1.5' : 'min-w-40 flex-1 space-y-1.5'}>
         {data.map((slice, index) => (
           <div key={slice.label} className="flex items-baseline gap-2 text-[11px]">
             <span
               className="size-2 shrink-0 translate-y-px rounded-full"
-              style={{ backgroundColor: chartColor(index) }}
+              style={{ backgroundColor: slice.color ?? chartColor(index) }}
               aria-hidden
             />
             <dt className="min-w-0 flex-1 truncate text-slate-600">{slice.label}</dt>

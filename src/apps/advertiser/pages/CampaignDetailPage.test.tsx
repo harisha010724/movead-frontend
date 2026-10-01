@@ -1,18 +1,33 @@
 import type { ReactNode } from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/shared/api/client';
+import { TooltipProvider } from '@/shared/ui';
 import CampaignDetailPage from './CampaignDetailPage';
+import CampaignTripsPage from './CampaignTripsPage';
 
 vi.mock('@/shared/api/client', () => ({ api: { get: vi.fn() } }));
 
 /** The top bar wants a session and a notification query; neither is under test. */
 vi.mock('@/shared/layout/Page', () => ({
-  Page: ({ title, children }: { title: string; children: ReactNode }) => (
+  Page: ({
+    title,
+    backTo,
+    children,
+  }: {
+    title: string;
+    backTo?: string;
+    children: ReactNode;
+  }) => (
     <div>
+      {backTo ? (
+        <Link to={backTo} aria-label="Back to campaigns">
+          Back
+        </Link>
+      ) : null}
       <h1>{title}</h1>
       {children}
     </div>
@@ -28,29 +43,96 @@ vi.mock('@/shared/maps/LiveFleetMap', () => ({
   LiveFleetMap: () => <div data-testid="map" />,
 }));
 
-/**
- * Recharts measures its container, and jsdom reports every container as zero
- * by zero, so the real chart draws nothing to click. The stand-in keeps the
- * one contract the page depends on: a day can be selected, and the day handed
- * back is the civil date rather than the shortened label.
- */
-vi.mock('@/shared/ui/charts', () => ({
-  KmImpressionsChart: ({
-    data,
-    onSelectDay,
+vi.mock('@/shared/maps/nameJourneyStops', () => ({
+  nameJourneyStops: (stops: { name: string }[]) => Promise.resolve(stops),
+}));
+
+vi.mock('@/shared/maps/loadGoogleMaps', () => ({
+  loadGoogleMaps: () => Promise.resolve(),
+}));
+
+vi.mock('@/shared/maps/reverseGeocode', () => ({
+  reverseGeocode: () =>
+    Promise.resolve({ status: 'named', label: 'Koramangala, Bengaluru', placeId: 'p1' }),
+}));
+
+vi.mock('@/shared/maps/nearbyPlaces', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/maps/nearbyPlaces')>();
+  return {
+    ...actual,
+    nearbyPlacesWithin: () =>
+      Promise.resolve([
+        {
+          name: 'Forum Mall',
+          kind: 'Mall',
+          lat: 12.9702,
+          lng: 77.5902,
+          metres: 40,
+        },
+      ]),
+  };
+});
+
+vi.mock('@/shared/maps/ParkedSpotMap', () => ({
+  ParkedSpotMap: () => <div data-testid="parked-spot-map" />,
+}));
+
+vi.mock('@/shared/maps/TripRouteMap', () => ({
+  TripRouteMap: ({
+    legs,
+    colourBy,
+    places,
+    stops,
+    parked,
   }: {
-    data: { date: string; label: string }[];
-    onSelectDay?: (date: string) => void;
+    legs: { zone: string }[];
+    colourBy?: string;
+    places?: { name: string }[];
+    stops?: { name: string }[];
+    parked?: { name: string } | null;
   }) => (
-    <div>
-      {data.map((point) => (
-        <button key={point.date} type="button" onClick={() => onSelectDay?.(point.date)}>
-          {point.label}
-        </button>
-      ))}
+    <div data-testid="trip-route-map">
+      {colourBy ?? 'zone'}:{legs[0]?.zone ?? 'empty'}
+      {(stops ?? places ?? []).map((place) => place.name).join(',')}
+      {parked ? `parked:${parked.name}` : ''}
     </div>
   ),
 }));
+
+/**
+ * Radix's portal listbox needs scrollIntoView, which jsdom does not implement.
+ * The stand-in keeps the contract the page depends on: a named control that
+ * can change the selected driver.
+ */
+vi.mock('@/shared/ui/form', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/ui/form')>();
+  return {
+    ...actual,
+    InlineSelect: ({
+      label,
+      value,
+      onValueChange,
+      options,
+    }: {
+      label: string;
+      value: string;
+      onValueChange: (value: string) => void;
+      options: { value: string; label: string }[];
+    }) => (
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onValueChange(event.target.value)}
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    ),
+  };
+});
 
 const get = vi.mocked(api.get);
 
@@ -71,52 +153,186 @@ const CAMPAIGN = {
   impressions: 0,
 };
 
-const IMPRESSIONS = {
-  campaignId: 'cmp_1',
-  campaignName: 'ABC Summer',
-  modelVersion: '1.0.0',
-  verifiedKm: 4820.4,
-  impressions: 612_400,
-  charge: '186400.00',
-  cpm: '304.37',
-  byZone: [
-    { zone: 'prime', verifiedKm: 1200.5, impressions: 402_100, charge: '6002.50' },
-    // Nothing for `network`: the campaign has never driven there.
-    { zone: 'secondary', verifiedKm: 3619.9, impressions: 210_300, charge: '7239.80' },
-  ],
-  byDay: [
-    { date: '2026-09-20', verifiedKm: 210.2, impressions: 28_400 },
-    { date: '2026-09-21', verifiedKm: 244.8, impressions: 33_100 },
-  ],
-  baselineMix: { cellHour: 0.62, cell: 0.23, zoneDefault: 0.15 },
+const NEW_TRIP = {
+  id: 'trip-new',
+  vehicleRegistration: 'KA05AB9012',
+  startedAt: '2026-09-28T15:10:00+05:30',
+  endedAt: '2026-09-28T16:02:00+05:30',
+  verifiedKm: 12.4,
+  charge: '42.00',
+  status: 'verified',
+  idleSecondsBefore: 18 * 60,
+  impressions: 1840,
 };
 
-const DAY = {
+const OLD_TRIP = {
+  id: 'trip-old',
+  vehicleRegistration: 'KA01CD4471',
+  startedAt: '2026-09-28T07:10:00+05:30',
+  endedAt: '2026-09-28T08:05:00+05:30',
+  verifiedKm: 8.1,
+  charge: '21.50',
+  status: 'verified',
+  idleSecondsBefore: null,
+  impressions: 980,
+};
+
+const DRIVERS = [
+  { id: 'drv_ramesh', name: 'Ramesh Babu' },
+  { id: 'drv_suresh', name: 'Suresh Yadav' },
+];
+
+const ROSTER = [
+  {
+    id: 'drv_ramesh',
+    name: 'Ramesh Babu',
+    vehicleRegistration: 'KA05AB9012',
+    area: 'Koramangala',
+    verifiedKm: 812.3,
+    state: 'RUNNING' as const,
+  },
+  {
+    id: 'drv_suresh',
+    name: 'Suresh Yadav',
+    vehicleRegistration: 'KA01CD4471',
+    area: 'Indiranagar',
+    verifiedKm: 410.1,
+    state: 'IDLE' as const,
+  },
+];
+
+const OLDER_TRIP = {
+  id: 'trip-older',
+  vehicleRegistration: 'KA03EF2288',
+  startedAt: '2026-09-27T18:10:00+05:30',
+  endedAt: '2026-09-27T19:00:00+05:30',
+  verifiedKm: 6.2,
+  charge: '18.00',
+  status: 'verified',
+  idleSecondsBefore: null,
+  impressions: 720,
+};
+
+const STATUS_COUNTS = { all: 2, verified: 2, pending_review: 0, rejected: 0 };
+
+function tripsPage(
+  trips: typeof NEW_TRIP[],
+  extra: Record<string, unknown> = {},
+) {
+  return {
+    drivers: DRIVERS,
+    trips,
+    total: trips.length,
+    limit: 25,
+    offset: 0,
+    statusCounts: STATUS_COUNTS,
+    nextBefore: null,
+    ...extra,
+  };
+}
+
+const NEW_DETAIL = {
+  id: 'trip-new',
+  vehicleRegistration: 'KA05AB9012',
+  startedAt: NEW_TRIP.startedAt,
+  endedAt: NEW_TRIP.endedAt,
+  distanceKm: 12.4,
+  advertiserCharge: '42.00',
+  status: 'verified',
+  legs: [
+    {
+      zone: 'prime',
+      state: 'BILLABLE',
+      flagReason: null,
+      startedAt: NEW_TRIP.startedAt,
+      endedAt: NEW_TRIP.endedAt,
+      distanceKm: 12.4,
+      advertiserRate: '5.0000',
+      advertiserCharge: '42.00',
+      segments: 40,
+      visibility: 'medium',
+      path: [
+        { lat: 12.97, lng: 77.59 },
+        { lat: 12.98, lng: 77.6 },
+      ],
+    },
+  ],
+  places: [
+    {
+      kind: 'mall' as const,
+      name: 'Forum Mall',
+      lat: 12.975,
+      lng: 77.595,
+      km: 0.4,
+      seconds: 90,
+      visits: 2,
+      source: 'osm' as const,
+    },
+  ],
+  parked: {
+    seconds: 18 * 60,
+    lat: 12.97,
+    lng: 77.59,
+  },
+};
+
+const OLD_DETAIL = {
+  ...NEW_DETAIL,
+  id: 'trip-old',
+  vehicleRegistration: 'KA01CD4471',
+  startedAt: OLD_TRIP.startedAt,
+  endedAt: OLD_TRIP.endedAt,
+  distanceKm: 8.1,
+  advertiserCharge: '21.50',
+  legs: [
+    {
+      ...NEW_DETAIL.legs[0],
+      zone: 'secondary',
+      distanceKm: 8.1,
+      advertiserCharge: '21.50',
+      startedAt: OLD_TRIP.startedAt,
+      endedAt: OLD_TRIP.endedAt,
+    },
+  ],
+  parked: null,
+};
+
+const VISIBILITY = {
   campaignId: 'cmp_1',
-  date: '2026-09-21',
-  modelVersion: '1.0.0',
-  verifiedKm: 244.8,
-  impressions: 33_100,
-  charge: '9130.00',
-  cpm: '275.83',
-  byZone: [],
-  byDay: [],
-  baselineMix: { cellHour: 0.7, cell: 0.2, zoneDefault: 0.1 },
-  working: {
-    jamDensity: 150,
-    occupantsPerVehicle: 1.5,
-    lineOfSightShare: 0.3,
-    wrapQuality: 0.85,
-    zones: [
-      { zone: 'prime', lanes: 4, pedestrianDensity: 120 },
-      { zone: 'secondary', lanes: 3, pedestrianDensity: 50 },
-    ],
-    medianObservedKmh: 12.4,
-    medianBaselineKmh: 34,
+  version: 'v1.0.0',
+  highKm: 180.2,
+  mediumKm: 200.1,
+  lowKm: 64.1,
+  classifiedKm: 444.4,
+  highShare: 0.4055,
+  bands: { high: '<15 km/h', medium: '15–35 km/h', low: '>35 km/h' },
+  places: [],
+  byKind: [],
+  when: {
+    version: 'v1.0.0',
+    morningKm: 0,
+    middayKm: 0,
+    eveningKm: 0,
+    nightKm: 0,
+    readableKm: 0,
+    peakShare: 0,
+    windows: {
+      morning: '07:00–11:00 IST',
+      midday: '11:00–17:00 IST',
+      evening: '17:00–21:00 IST',
+      night: '21:00–07:00 IST',
+    },
   },
 };
 
 const DASHBOARD = {
+  comparison: {
+    impressions: 0,
+    verifiedKm: -0.12,
+    spend: 0,
+    activeVehicles: 0,
+    costPerThousandImpressions: 0,
+  },
   topVehicles: [
     {
       vehicleNumber: 'KA05AB9012',
@@ -133,11 +349,89 @@ const DASHBOARD = {
 
 /** Everything the page asks for, keyed the way the server routes it. */
 function respond(overrides: Record<string, unknown> = {}) {
-  get.mockImplementation((path: string) => {
+  get.mockImplementation((
+    path: string,
+    options?: {
+      query?: {
+        driverId?: string;
+        q?: string;
+        status?: string;
+        limit?: number;
+        offset?: number;
+      };
+    },
+  ) => {
+    if (path === '/v1/campaigns/cmp_1/trips') {
+      if (path in overrides) return Promise.resolve(overrides[path]);
+      const query = options?.query ?? {};
+      const offset = Number(query.offset ?? 0);
+      const needle = String(query.q ?? '').trim().toLowerCase().replace(/\s+/g, '');
+      let rows =
+        query.driverId === 'drv_suresh' ? [OLD_TRIP] : [NEW_TRIP, OLD_TRIP];
+      if (needle) {
+        rows = rows.filter((trip) => trip.vehicleRegistration.toLowerCase().includes(needle));
+      }
+      if (query.status && query.status !== 'all') {
+        rows = rows.filter((trip) => trip.status === query.status);
+      }
+      const counts = {
+        all: rows.length,
+        verified: rows.filter((trip) => trip.status === 'verified').length,
+        pending_review: rows.filter((trip) => trip.status === 'pending_review').length,
+        rejected: rows.filter((trip) => trip.status === 'rejected').length,
+      };
+      if (offset >= 25) {
+        return Promise.resolve(
+          tripsPage([OLDER_TRIP], { total: 26, offset: 25, statusCounts: { ...STATUS_COUNTS, all: 26 } }),
+        );
+      }
+      return Promise.resolve(
+        tripsPage(rows, {
+          total: query.driverId === 'drv_ramesh' && !needle && !query.status ? 26 : rows.length,
+          offset,
+          limit: Number(query.limit ?? 25),
+          statusCounts: query.driverId === 'drv_ramesh' && !needle && !query.status
+            ? { ...STATUS_COUNTS, all: 26, verified: 26 }
+            : counts,
+        }),
+      );
+    }
+
+    if (path === '/v1/campaigns/cmp_1/drivers') {
+      if (path in overrides) return Promise.resolve(overrides[path]);
+      const needle = String(options?.query?.q ?? '').trim().toLowerCase();
+      const plateNeedle = needle.replace(/\s+/g, '');
+      const matched = ROSTER.filter((driver) => {
+        if (!needle) return true;
+        return (
+          driver.name.toLowerCase().includes(needle) ||
+          driver.vehicleRegistration.toLowerCase().includes(plateNeedle)
+        );
+      });
+      const limit = Number(options?.query?.limit ?? 5);
+      const offset = Number(options?.query?.offset ?? 0);
+      return Promise.resolve({
+        drivers: matched.slice(offset, offset + limit),
+        total: matched.length,
+        limit,
+        offset,
+      });
+    }
+
     const table: Record<string, unknown> = {
       '/v1/campaigns/cmp_1': CAMPAIGN,
-      '/v1/campaigns/cmp_1/impressions': IMPRESSIONS,
-      '/v1/campaigns/cmp_1/impressions/days/2026-09-21': DAY,
+      '/v1/campaigns/cmp_1/trips/trip-new': NEW_DETAIL,
+      '/v1/campaigns/cmp_1/trips/trip-old': OLD_DETAIL,
+      '/v1/campaigns/cmp_1/trips/trip-older': {
+        ...OLD_DETAIL,
+        id: 'trip-older',
+        vehicleRegistration: 'KA03EF2288',
+        startedAt: OLDER_TRIP.startedAt,
+        endedAt: OLDER_TRIP.endedAt,
+        distanceKm: 6.2,
+        advertiserCharge: '18.00',
+      },
+      '/v1/campaigns/cmp_1/visibility': VISIBILITY,
       '/v1/dashboard/advertiser': DASHBOARD,
       '/v1/vehicles/live-positions': { items: [], updatedAt: '2026-09-21T10:00:00+05:30' },
       ...overrides,
@@ -147,23 +441,29 @@ function respond(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function renderPage() {
+function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={['/campaigns/cmp_1']}>
-        <Routes>
-          <Route path="/campaigns/:campaignId" element={<CampaignDetailPage />} />
-        </Routes>
-      </MemoryRouter>
+      <TooltipProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/campaigns/:campaignId" element={<CampaignDetailPage />} />
+            <Route path="/campaigns/:campaignId/trips/:driverId" element={<CampaignTripsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>
     </QueryClientProvider>,
   );
 }
 
-/** A headline figure. StatCard renders the value as the label's next sibling. */
-function figureValue(label: string): string {
-  return screen.getByText(label).nextElementSibling?.textContent ?? '';
+function renderPage() {
+  renderAt('/campaigns/cmp_1');
+}
+
+function renderTrips(driverId = 'drv_ramesh') {
+  renderAt(`/campaigns/cmp_1/trips/${driverId}`);
 }
 
 beforeEach(() => {
@@ -172,107 +472,268 @@ beforeEach(() => {
 });
 
 describe('campaign detail', () => {
-  it('reports the modelled audience, not the campaign record, which nothing writes to', async () => {
-    renderPage();
-    await screen.findByText('612K');
-
-    // The campaigns list reads `campaign.impressions`, which the API hard-codes
-    // to zero. This page must not inherit that number.
-    expect(CAMPAIGN.impressions).toBe(0);
-    expect(figureValue('Modelled Impressions')).toBe('612K');
-  });
-
-  /*
-   * A campaign that has reached six hundred thousand people should never
-   * render "0 impressions", not even for the frame before the query lands.
-   * Absent is honest; zero is a claim.
-   */
-  it('leaves the audience figures blank until they arrive, never zero', async () => {
-    respond({ '/v1/campaigns/cmp_1/impressions': new Promise(() => undefined) });
+  it('shows how much billed distance was readable while moving', async () => {
     renderPage();
     await screen.findByText('Verified Distance');
 
-    expect(figureValue('Modelled Impressions')).toBe('—');
-    expect(figureValue('Cost per 1,000 Impressions')).toBe('—');
+    expect(await screen.findByText('Readable while moving')).toBeInTheDocument();
+    expect(screen.getByText('40.6%')).toBeInTheDocument();
+    expect(screen.getByText(/180\.2 km of billed km under 15 km\/h/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Readable while moving/ })).toHaveAttribute(
+      'href',
+      '/analytics',
+    );
   });
 
-  it('says how much of the audience is measured rather than assumed', async () => {
+  it('links back to the campaign list', async () => {
     renderPage();
+    await screen.findByText('ABC Summer');
 
-    // 62% this road and hour, plus 23% this road across the week.
-    expect(await screen.findByText('85.0%')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Back to campaigns' })).toHaveAttribute(
+      'href',
+      '/campaigns',
+    );
   });
 
-  it('opens a day by its civil date, not by the label the chart shows', async () => {
+  it('lists every driver and links their recorded trips', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '09/21' }));
+    const table = await screen.findByRole('table', { name: 'Drivers on this campaign' });
+    expect(within(table).getByText('Ramesh Babu')).toBeInTheDocument();
+    expect(within(table).getByText('Suresh Yadav')).toBeInTheDocument();
+    expect(within(table).getByText(/KA 05 AB 9012/)).toBeInTheDocument();
+    expect(within(table).getByText('Koramangala')).toBeInTheDocument();
+    expect(screen.queryByTestId('trip-route-map')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Ramesh Babu ·/ })).not.toBeInTheDocument();
+
+    expect(screen.getByRole('link', { name: 'Recorded trips for Ramesh Babu' })).toHaveAttribute(
+      'href',
+      '/campaigns/cmp_1/trips/drv_ramesh',
+    );
+    expect(screen.getByRole('link', { name: 'Recorded trips for Suresh Yadav' })).toHaveAttribute(
+      'href',
+      '/campaigns/cmp_1/trips/drv_suresh',
+    );
+    expect(screen.getByText(/Showing 1–2 of 2 drivers/)).toBeInTheDocument();
+  });
+
+  it('searches the roster by driver name or vehicle number', async () => {
+    renderPage();
+    await screen.findByRole('table', { name: 'Drivers on this campaign' });
+
+    fireEvent.change(screen.getByLabelText('Search drivers'), { target: { value: 'KA 01' } });
 
     await waitFor(() => {
-      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/impressions/days/2026-09-21');
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/drivers', {
+        query: { q: 'KA 01', limit: 5, offset: 0 },
+      });
     });
+
+    expect(await screen.findByText('Suresh Yadav')).toBeInTheDocument();
+    expect(screen.queryByText('Ramesh Babu')).not.toBeInTheDocument();
   });
 
-  /*
-   * Both figures are medians of their own distributions, so dividing one by
-   * the other would not be the median congestion. If someone ever replaces
-   * this pair with a single percentage, this fails.
-   */
-  it('shows the two speeds the congestion was read from', async () => {
-    renderPage();
+  it('sketches the trip cards and map while recorded trips load', async () => {
+    respond({ '/v1/campaigns/cmp_1/trips': new Promise(() => undefined) });
+    renderTrips();
 
-    fireEvent.click(await screen.findByRole('button', { name: '09/21' }));
-
-    const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByText('12.4 km/h')).toBeInTheDocument();
-    expect(within(dialog).getByText('34.0 km/h')).toBeInTheDocument();
+    expect(await screen.findByLabelText('Loading recorded trips')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Recorded Trips' })).toBeInTheDocument();
+    expect(screen.getByText('Newest first. Select a trip to replay it on the map.')).toBeInTheDocument();
+    expect(screen.getByText('Colour by zone')).toBeInTheDocument();
+    expect(screen.getByText('Prime')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /KA 05 AB 9012/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('trip-route-map')).not.toBeInTheDocument();
   });
 
-  it('publishes every coefficient the model applied', async () => {
-    renderPage();
+  it('shows average speed on each recorded trip', async () => {
+    renderTrips();
+    await screen.findByRole('button', { name: /KA 05 AB 9012/ });
 
-    fireEvent.click(await screen.findByRole('button', { name: '09/21' }));
-
-    const dialog = await screen.findByRole('dialog');
-    expect(await within(dialog).findByText('Jam density')).toBeInTheDocument();
-    expect(within(dialog).getByText('150 vehicles per lane-km')).toBeInTheDocument();
-    expect(within(dialog).getByText('Line of sight')).toBeInTheDocument();
-    expect(within(dialog).getByText('30.0%')).toBeInTheDocument();
-    expect(within(dialog).getByText('85.0%')).toBeInTheDocument();
-    expect(within(dialog).getByText('1.50')).toBeInTheDocument();
+    expect(screen.getByText('14.3 km/h')).toBeInTheDocument();
+    expect(screen.getByText('8.8 km/h')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Avg Speed')).toHaveLength(2);
+    expect(screen.getByText('1,840')).toBeInTheDocument();
+    expect(screen.getByText('980')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Modelled impressions')).toHaveLength(2);
   });
 
-  it('says a day could not be read rather than implying free-flowing roads', async () => {
-    respond({
-      '/v1/campaigns/cmp_1/impressions/days/2026-09-21': {
-        ...DAY,
-        working: { ...DAY.working, medianObservedKmh: null, medianBaselineKmh: null },
-      },
+  it('labels the trip route zones and filters recorded trips', async () => {
+    renderTrips();
+    await screen.findByRole('button', { name: /KA 05 AB 9012/ });
+
+    expect(screen.getAllByText('Prime').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Secondary').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Network').length).toBeGreaterThan(0);
+
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Filter trips' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /In Review/ }));
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips', {
+        query: { driverId: 'drv_ramesh', status: 'pending_review', limit: 25, offset: 0 },
+      });
     });
-    renderPage();
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /KA 05 AB 9012/ })).not.toBeInTheDocument();
+    });
 
-    fireEvent.click(await screen.findByRole('button', { name: '09/21' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Filter trips' }), { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /^All/ }));
+    fireEvent.change(screen.getByLabelText('Search trips'), { target: { value: 'KA 01' } });
 
-    expect(await screen.findByText(/No speeds were recorded for this day/)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips', {
+        query: { driverId: 'drv_ramesh', q: 'KA 01', limit: 25, offset: 0 },
+      });
+    });
+    expect(await screen.findByRole('button', { name: /KA 01 CD 4471/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /KA 05 AB 9012/ })).not.toBeInTheDocument();
   });
 
-  /*
-   * The API omits a zone the campaign never drove in. The split bar needs all
-   * three or it silently rescales, showing a two-zone campaign as though the
-   * missing zone were not part of the rate card at all.
-   */
-  it('keeps a zone in the split even when nothing was driven there', async () => {
+  it('sketches each roster row while the drivers load', async () => {
+    respond({ '/v1/campaigns/cmp_1/drivers': new Promise(() => undefined) });
     renderPage();
+    await screen.findByText('Verified Distance');
 
-    const bar = await screen.findByRole('img', { name: /^Zone mix:/ });
-    expect(bar).toHaveAccessibleName(/Network 0\.0%/);
+    expect(await screen.findByLabelText('Loading drivers')).toBeInTheDocument();
+    expect(screen.getByLabelText('Search drivers')).toBeInTheDocument();
+    expect(screen.getByText('Driver')).toBeInTheDocument();
+    expect(screen.getByText('Vehicle')).toBeInTheDocument();
+    expect(screen.getByText('Area')).toBeInTheDocument();
+    expect(screen.getByText('Verified KM')).toBeInTheDocument();
+    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.queryByRole('table', { name: 'Drivers on this campaign' })).not.toBeInTheDocument();
   });
 
-  it('lists the vehicles and what each was charged for', async () => {
+  it('does not wait on the dashboard to list the drivers', async () => {
+    respond({ '/v1/dashboard/advertiser': new Promise(() => undefined) });
     renderPage();
+    await screen.findByText('Verified Distance');
 
-    const row = (await screen.findByText('KA 05 AB 9012')).closest('tr') as HTMLElement;
-    expect(within(row).getByText('Ramesh Babu')).toBeInTheDocument();
-    expect(within(row).getByText('₹4,100.00')).toBeInTheDocument();
+    expect(await screen.findByRole('table', { name: 'Drivers on this campaign' })).toBeInTheDocument();
+    expect(screen.getByText('Ramesh Babu')).toBeInTheDocument();
+  });
+
+  it('selects the most recent trip and draws it on the map', async () => {
+    renderTrips();
+
+    const recent = await screen.findByRole('button', { name: /KA 05 AB 9012/ });
+    expect(recent).toHaveAttribute('aria-pressed', 'true');
+
+    expect(await screen.findByTestId('trip-route-map')).toHaveTextContent('zone:prime');
+    expect(screen.getAllByRole('button', { name: /Parked 18 min/ }).length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips/trip-new');
+    });
+    expect((await screen.findAllByText(/Koramangala/)).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('trip-route-map')).toHaveTextContent('parked:Koramangala');
+  });
+
+  it('opens a parked map popup with places within 100 m', async () => {
+    renderTrips();
+    await screen.findByTestId('trip-route-map');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Parked 18 min\. Show where/ })[0]!);
+
+    expect(await screen.findByRole('dialog', { name: /Parked 18 min/ })).toBeInTheDocument();
+    expect(screen.getByTestId('parked-spot-map')).toBeInTheDocument();
+    const places = await screen.findByRole('list', { name: 'Places within 100 metres' });
+    expect(places).toHaveTextContent('Forum Mall');
+    expect(screen.getByText('40 m')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Forum Mall/ }));
+    expect(screen.getByRole('button', { name: /Forum Mall/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('redraws the map when another trip is selected', async () => {
+    renderTrips();
+    await screen.findByTestId('trip-route-map');
+
+    fireEvent.click(screen.getByRole('button', { name: /KA 01 CD 4471/ }));
+
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips/trip-old');
+    });
+    expect(await screen.findByTestId('trip-route-map')).toHaveTextContent('zone:secondary');
+    expect(screen.getByRole('button', { name: /KA 01 CD 4471/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('opens only that driver\'s trips from the roster', async () => {
+    renderTrips('drv_suresh');
+    await screen.findByTestId('trip-route-map');
+
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips', {
+        query: { driverId: 'drv_suresh', limit: 25, offset: 0 },
+      });
+    });
+    expect(screen.queryByLabelText('Driver')).not.toBeInTheDocument();
+
+    expect(await screen.findByRole('button', { name: /KA 01 CD 4471/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.queryByRole('button', { name: /KA 05 AB 9012/ })).not.toBeInTheDocument();
+    expect(await screen.findByTestId('trip-route-map')).toHaveTextContent('zone:secondary');
+  });
+
+  it('fetches the next trips when another page is opened', async () => {
+    renderTrips();
+    await screen.findByRole('button', { name: /KA 05 AB 9012/ });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 2' }));
+
+    await waitFor(() => {
+      expect(get).toHaveBeenCalledWith('/v1/campaigns/cmp_1/trips', {
+        query: { driverId: 'drv_ramesh', limit: 25, offset: 25 },
+      });
+    });
+
+    expect(await screen.findByRole('button', { name: /KA 03 EF 2288/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /KA 05 AB 9012/ })).not.toBeInTheDocument();
+    expect(screen.getByText(/Showing 26–26 of 26 trips/)).toBeInTheDocument();
+  });
+
+  it('colours the trip by visibility when asked', async () => {
+    renderTrips();
+    expect(await screen.findByTestId('trip-route-map')).toHaveTextContent('zone:prime');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Colour by visibility' }));
+
+    expect(screen.getByRole('button', { name: 'Colour by visibility' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('High <15 km/h')).toBeInTheDocument();
+    expect(await screen.findByTestId('trip-route-map')).toHaveTextContent('visibility:prime');
+    expect(screen.getByTestId('trip-route-map')).toHaveTextContent('Forum Mall');
+    expect(screen.getByRole('list', { name: 'Trip journey' })).toHaveTextContent('Forum Mall');
+    expect(screen.getByRole('list', { name: 'Trip waypoints' })).toHaveTextContent('Forum Mall');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse trip places' }));
+    expect(screen.queryByRole('list', { name: 'Trip waypoints' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand trip places' }));
+    expect(screen.getByRole('list', { name: 'Trip waypoints' })).toHaveTextContent('Forum Mall');
+
+    expect(screen.getByRole('button', { name: 'Satellite' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Map' }));
+    expect(screen.getByRole('button', { name: 'Map' })).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide recorded trips' }));
+    expect(screen.getByRole('button', { name: 'Show recorded trips' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show recorded trips' }));
+    expect(screen.getByRole('heading', { name: 'Recorded Trips' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide trip journey' }));
+    expect(screen.queryByRole('list', { name: 'Trip journey' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show trip journey' }));
+    expect(screen.getByRole('list', { name: 'Trip journey' })).toHaveTextContent('Forum Mall');
   });
 });

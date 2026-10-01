@@ -27,10 +27,14 @@ const DashboardPage = lazyPage(() => import('./pages/DashboardPage'));
 const CampaignsPage = lazyPage(() => import('./pages/CampaignsPage'));
 const CampaignCreatePage = lazyPage(() => import('./pages/CampaignCreatePage'));
 const CampaignDetailPage = lazyPage(() => import('./pages/CampaignDetailPage'));
+const CampaignTripsPage = lazyPage(() => import('./pages/CampaignTripsPage'));
 const LiveTrackingPage = lazyPage(() => import('./pages/LiveTrackingPage'));
 const VehiclesPage = lazyPage(() => import('./pages/VehiclesPage'));
 const ReportsPage = lazyPage(() => import('./pages/ReportsPage'));
+const AnalyticsPage = lazyPage(() => import('./pages/AnalyticsPage'));
+const ImpressionsPage = lazyPage(() => import('./pages/ImpressionsPage'));
 const BillingPage = lazyPage(() => import('./pages/BillingPage'));
+const NotificationsPage = lazyPage(() => import('./pages/NotificationsPage'));
 const PlaceholderPage = lazyPage(() => import('@/shared/pages/PlaceholderPage'));
 const NotFoundPage = lazyPage(() => import('@/shared/pages/NotFoundPage'));
 
@@ -59,16 +63,7 @@ const nav: NavItem[] = [
     permission: PERMISSIONS.trackingRead,
   },
   { to: '/analytics', label: 'Analytics', icon: BarChart3, permission: PERMISSIONS.reportRead },
-  {
-    to: '/impressions',
-    label: 'Impressions',
-    icon: Eye,
-    permission: PERMISSIONS.reportRead,
-    children: [
-      { to: '/impressions/by-area', label: 'By Area' },
-      { to: '/impressions/by-vehicle', label: 'By Vehicle Type' },
-    ],
-  },
+  { to: '/impressions', label: 'Impressions', icon: Eye, permission: PERMISSIONS.reportRead },
   { to: '/reports', label: 'Reports', icon: FileText, permission: PERMISSIONS.reportRead },
   {
     to: '/billing',
@@ -139,6 +134,14 @@ export function AdvertiserApp() {
           would rank it ahead of this pattern either way.
         */}
         <Route
+          path="campaigns/:campaignId/trips/:driverId"
+          element={
+            <RequirePermission permission={PERMISSIONS.campaignRead}>
+              <CampaignTripsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
           path="campaigns/:campaignId"
           element={
             <RequirePermission permission={PERMISSIONS.campaignRead}>
@@ -171,6 +174,22 @@ export function AdvertiserApp() {
           }
         />
         <Route
+          path="analytics"
+          element={
+            <RequirePermission permission={PERMISSIONS.reportRead}>
+              <AnalyticsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
+          path="impressions"
+          element={
+            <RequirePermission permission={PERMISSIONS.reportRead}>
+              <ImpressionsPage />
+            </RequirePermission>
+          }
+        />
+        <Route
           path="reports"
           element={
             <RequirePermission permission={PERMISSIONS.reportRead}>
@@ -192,7 +211,6 @@ export function AdvertiserApp() {
           path="vehicles/performance"
           element={<PlaceholderPage title="Vehicle Performance" />}
         />
-        <Route path="analytics" element={<PlaceholderPage title="Analytics" />} />
         <Route
           path="impressions/by-area"
           element={<PlaceholderPage title="Impressions by Area" />}
@@ -201,7 +219,7 @@ export function AdvertiserApp() {
           path="impressions/by-vehicle"
           element={<PlaceholderPage title="Impressions by Vehicle Type" />}
         />
-        <Route path="notifications" element={<PlaceholderPage title="Notifications" />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="settings" element={<PlaceholderPage title="Settings" />} />
         <Route path="support" element={<PlaceholderPage title="Support" />} />
 

@@ -1,7 +1,7 @@
 import { cn } from '@/shared/lib/cn';
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('skeleton h-4 w-full', className)} aria-hidden />;
+  return <div className={cn('skeleton h-4 w-full rounded', className)} aria-hidden />;
 }
 
 export function SkeletonStatCards({ count = 4 }: { count?: number }) {

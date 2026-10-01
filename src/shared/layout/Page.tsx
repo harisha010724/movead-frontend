@@ -7,6 +7,10 @@ interface PageProps {
   greeting?: string;
   /** Page-level controls rendered in the top bar, e.g. filters or a date range. */
   controls?: ReactNode;
+  /** Shown as a back control next to the title, e.g. `/campaigns`. */
+  backTo?: string;
+  /** Status (or similar) rendered beside the title. */
+  badge?: ReactNode;
   notificationCount?: number;
   /** Extra classes on the padded content column (e.g. a fill-height layout). */
   contentClassName?: string;
@@ -18,6 +22,8 @@ export function Page({
   title,
   greeting,
   controls,
+  backTo,
+  badge,
   notificationCount,
   contentClassName,
   children,
@@ -28,6 +34,8 @@ export function Page({
         title={title}
         {...(greeting ? { greeting } : {})}
         {...(controls ? { controls } : {})}
+        {...(backTo ? { backTo } : {})}
+        {...(badge !== undefined ? { badge } : {})}
         {...(notificationCount !== undefined ? { notificationCount } : {})}
       />
       <div className={cn('flex-1 px-6 py-6', contentClassName)}>{children}</div>

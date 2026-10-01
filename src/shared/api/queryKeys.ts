@@ -26,9 +26,15 @@ export const queryKeys = {
     zones: (id: string) => ['campaigns', id, 'zones'] as const,
     assignments: (id: string) => ['campaigns', id, 'assignments'] as const,
     impressions: (id: string) => ['campaigns', id, 'impressions'] as const,
+    visibility: (id: string) => ['campaigns', id, 'visibility'] as const,
     /** Under the campaign's impressions, so one prefix drops both. */
     dayImpressions: (id: string, date: string) =>
       ['campaigns', id, 'impressions', 'day', date] as const,
+    drivers: (id: string, filters?: Record<string, unknown>) =>
+      ['campaigns', id, 'drivers', filters ?? {}] as const,
+    trips: (id: string, filters?: Record<string, unknown>) =>
+      ['campaigns', id, 'trips', filters ?? {}] as const,
+    trip: (id: string, tripId: string) => ['campaigns', id, 'trips', tripId] as const,
   },
 
   installations: {
@@ -81,6 +87,10 @@ export const queryKeys = {
     trips: (vehicleNumber: string, date: string) =>
       ['gps-audit', vehicleNumber, date] as const,
     trip: (tripId: string) => ['gps-audit', 'trip', tripId] as const,
+  },
+
+  reports: {
+    list: () => ['reports', 'list'] as const,
   },
 
   billing: {

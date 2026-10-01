@@ -13,6 +13,10 @@ import type {
   Campaign,
   CampaignDayImpressions,
   CampaignImpressions,
+  CampaignRoster,
+  CampaignTripDetail,
+  CampaignTrips,
+  CampaignVisibility,
   DriverCampaign,
   DriverProfile,
   EligibilityCheck,
@@ -23,6 +27,7 @@ import type {
   Money,
   Paginated,
   RateCard,
+  ReportExport,
   SpendBreakdown,
   TripDetail,
   VehicleAvailability,
@@ -85,6 +90,84 @@ export function useCampaignImpressions(id: string | undefined) {
     queryFn: () => api.get<CampaignImpressions>(`/v1/campaigns/${id ?? ''}/impressions`),
     enabled: Boolean(id),
     ...freshness.aggregate,
+  });
+}
+
+/**
+ * How readable the wrap was, from the same GPS that billed the kilometres.
+ *
+ * `aggregate`: a live campaign gains classified kilometres as drivers finish
+ * trips, and the figure under Verified Distance should move with them.
+ */
+export function useCampaignVisibility(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.visibility(id ?? ''),
+    queryFn: () => api.get<CampaignVisibility>(`/v1/campaigns/${id ?? ''}/visibility`),
+    enabled: Boolean(id),
+    ...freshness.aggregate,
+  });
+}
+
+/**
+ * Drives recorded while carrying this campaign, newest first.
+ *
+ * `aggregate`: a live campaign gains trips as drivers finish them, and an
+ * advertiser watching the page should not have to reload to see the latest.
+ */
+export function useCampaignDrivers(
+  id: string | undefined,
+  filters: { q?: string; limit?: number; offset?: number } = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.drivers(id ?? '', filters),
+    queryFn: () =>
+      api.get<CampaignRoster>(`/v1/campaigns/${id ?? ''}/drivers`, {
+        query: {
+          ...(filters.q ? { q: filters.q } : {}),
+          ...(filters.limit != null ? { limit: filters.limit } : {}),
+          ...(filters.offset != null ? { offset: filters.offset } : {}),
+        },
+      }),
+    enabled: Boolean(id),
+    ...freshness.aggregate,
+  });
+}
+
+export function useCampaignTrips(
+  id: string | undefined,
+  filters: {
+    driverId?: string | null;
+    q?: string;
+    status?: 'verified' | 'pending_review' | 'rejected';
+    limit?: number;
+    offset?: number;
+  } = {},
+) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.trips(id ?? '', filters),
+    queryFn: () =>
+      api.get<CampaignTrips>(`/v1/campaigns/${id ?? ''}/trips`, {
+        query: {
+          ...(filters.driverId ? { driverId: filters.driverId } : {}),
+          ...(filters.q ? { q: filters.q } : {}),
+          ...(filters.status ? { status: filters.status } : {}),
+          ...(filters.limit != null ? { limit: filters.limit } : {}),
+          ...(filters.offset != null ? { offset: filters.offset } : {}),
+        },
+      }),
+    enabled: Boolean(id),
+    ...freshness.aggregate,
+  });
+}
+
+/** One of those trips, with the route and zone split behind its charge. */
+export function useCampaignTrip(campaignId: string | undefined, tripId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.trip(campaignId ?? '', tripId ?? ''),
+    queryFn: () =>
+      api.get<CampaignTripDetail>(`/v1/campaigns/${campaignId ?? ''}/trips/${tripId ?? ''}`),
+    enabled: Boolean(campaignId && tripId),
+    ...freshness.reference,
   });
 }
 
@@ -422,12 +505,28 @@ export function useNotifications(enabled = true) {
   return useQuery({
     queryKey: queryKeys.notifications.inbox(portal),
     queryFn: () =>
-      api.get<{ items: AppNotification[]; unreadCount: number }>(notificationsBase(portal)),
+      api.get<{ items: AppNotification[]; unreadCount: number }>(notificationsBase(portal), {
+        query: { limit: 50 },
+      }),
     enabled: canFetch,
     staleTime: 15_000,
     refetchInterval: canFetch ? 30_000 : false,
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
+  });
+}
+
+export function useMarkAllNotificationsRead() {
+  const { user } = useAuth();
+  const portal = user?.portal;
+  const queryClient = useQueryClient();
+  const base = notificationsBase(portal);
+
+  return useMutation({
+    mutationFn: () => api.post<{ unreadCount: number }>(`${base}/read-all`),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notifications.inbox(portal) });
+    },
   });
 }
 
@@ -526,6 +625,14 @@ export function useInstallationPhotos(assignmentId: string | null) {
       api.get<{ items: InstallationPhoto[] }>(`/v1/admin/assignments/${assignmentId ?? ''}/photos`),
     enabled: Boolean(assignmentId),
     ...freshness.reference,
+  });
+}
+
+export function useReportExports() {
+  return useQuery({
+    queryKey: queryKeys.reports.list(),
+    queryFn: () => api.get<{ items: ReportExport[] }>('/v1/reports'),
+    ...freshness.aggregate,
   });
 }
 

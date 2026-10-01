@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as RMenu from '@radix-ui/react-dropdown-menu';
 import { Bell, Megaphone } from 'lucide-react';
@@ -138,6 +138,18 @@ export function NotificationBell() {
               })}
             </div>
           )}
+          {portal === 'advertiser' ? (
+            <div className="border-t border-slate-100 px-3.5 py-2.5">
+              <RMenu.Item asChild>
+                <Link
+                  to="/notifications"
+                  className="text-[13px] font-medium text-brand-600 outline-none hover:text-brand-700"
+                >
+                  View all
+                </Link>
+              </RMenu.Item>
+            </div>
+          ) : null}
         </RMenu.Content>
       </RMenu.Portal>
     </RMenu.Root>

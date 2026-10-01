@@ -523,9 +523,14 @@ function mockTripLegs(tripIndex: number, startedAt: Date) {
   let offset = 0;
 
   return plan.map((leg, index) => {
+    // First stretch crawls, last flies — so the visibility colouring is not
+    // one colour for the whole trip. Minutes per kilometre: 8 ≈ 7.5 km/h,
+    // 3 ≈ 20 km/h, 1.2 ≈ 50 km/h.
+    const minutesPerKm = index === 0 ? 8 : index === plan.length - 1 ? 1.2 : 3;
+    const minutes = Math.max(1, Math.round(leg.km * minutesPerKm));
     const at = new Date(startedAt.getTime() + offset * 60_000);
-    offset += Math.round(leg.km * 3);
-    return mockLeg(leg, at, Math.round(leg.km * 3), tripIndex === 2 && index === plan.length - 1);
+    offset += minutes;
+    return mockLeg(leg, at, minutes, tripIndex === 2 && index === plan.length - 1);
   });
 }
 
@@ -595,6 +600,469 @@ function mockAuditTrip(date: string, index: number) {
       km: Number(totals.km.toFixed(1)),
       earnings: asMoney(totals.earnings.toFixed(2)),
     })),
+  };
+}
+
+const MOCK_CAMPAIGN_TRIP_PLATES = ['KA05AB9012', 'KA01CD4471', 'KA03EF2288'] as const;
+
+function mockCampaignTripRow(date: string, index: number) {
+  const listed = mockAuditTrip(date, index);
+  return {
+    id: listed.id,
+    vehicleRegistration: MOCK_CAMPAIGN_TRIP_PLATES[index % MOCK_CAMPAIGN_TRIP_PLATES.length] ?? 'KA05AB9012',
+    startedAt: listed.startedAt,
+    endedAt: listed.endedAt,
+    verifiedKm: listed.verifiedKm,
+    charge: asMoney(listed.charge.toFixed(2)),
+    status: listed.status,
+    idleSecondsBefore: index === 0 ? null : 18 * 60,
+    impressions: Math.round(listed.verifiedKm * 28),
+  };
+}
+
+/**
+ * Newest first. A campaign that has never been driven answers with an empty
+ * list, which is the state the detail page has to render honestly.
+ */
+const MOCK_CAMPAIGN_DRIVERS = [
+  { id: 'drv_ramesh', name: 'Ramesh Babu' },
+  { id: 'drv_suresh', name: 'Suresh Yadav' },
+  { id: 'drv_manoj', name: 'Manoj Singh' },
+] as const;
+
+const MOCK_CAMPAIGN_ROSTER = [
+  {
+    id: 'drv_ramesh',
+    name: 'Ramesh Babu',
+    vehicleRegistration: 'KA05AB9012',
+    area: 'Koramangala',
+    verifiedKm: 812.3,
+    state: 'RUNNING' as const,
+  },
+  {
+    id: 'drv_suresh',
+    name: 'Suresh Yadav',
+    vehicleRegistration: 'KA01CD4471',
+    area: 'Indiranagar',
+    verifiedKm: 410.1,
+    state: 'IDLE' as const,
+  },
+  {
+    id: 'drv_manoj',
+    name: 'Manoj Singh',
+    vehicleRegistration: 'KA03EF2288',
+    area: 'Whitefield',
+    verifiedKm: 188.4,
+    state: 'OFFLINE' as const,
+  },
+] as const;
+
+export function mockCampaignRoster(
+  campaignId: string,
+  options: { q?: string | null; limit?: number; offset?: number } = {},
+) {
+  if (campaignId === 'cmp_02' || campaignId === 'cmp_03') {
+    return { drivers: [], total: 0, limit: options.limit ?? 5, offset: options.offset ?? 0 };
+  }
+
+  const needle = (options.q ?? '').trim().toLowerCase();
+  const plateNeedle = needle.replace(/\s+/g, '');
+  const matched = MOCK_CAMPAIGN_ROSTER.filter((driver) => {
+    if (!needle) return true;
+    const plate = driver.vehicleRegistration.toLowerCase();
+    return driver.name.toLowerCase().includes(needle) || plate.includes(plateNeedle);
+  });
+  const limit = Math.min(Math.max(options.limit ?? 5, 1), 50);
+  const offset = Math.max(options.offset ?? 0, 0);
+
+  return {
+    drivers: matched.slice(offset, offset + limit),
+    total: matched.length,
+    limit,
+    offset,
+  };
+}
+
+export function mockCampaignTrips(
+  campaignId: string,
+  driverId?: string | null,
+  options: {
+    before?: string | null;
+    q?: string | null;
+    status?: string | null;
+    limit?: number;
+    offset?: number;
+  } = {},
+) {
+  if (campaignId === 'cmp_02' || campaignId === 'cmp_03') {
+    return {
+      drivers: [],
+      trips: [],
+      total: 0,
+      limit: options.limit ?? 25,
+      offset: options.offset ?? 0,
+      statusCounts: { all: 0, verified: 0, pending_review: 0, rejected: 0 },
+      nextBefore: null,
+    };
+  }
+
+  const dates = ['2026-09-28', '2026-09-27', '2026-09-26', '2026-09-25'];
+  const all = dates.flatMap((date) =>
+    [2, 1, 0].map((index) => ({
+      ...mockCampaignTripRow(date, index),
+      driverId: MOCK_CAMPAIGN_DRIVERS[index % MOCK_CAMPAIGN_DRIVERS.length]?.id,
+    })),
+  );
+  const byDriver = (driverId ? all.filter((trip) => trip.driverId === driverId) : all).sort(
+    (left, right) => Date.parse(right.startedAt) - Date.parse(left.startedAt),
+  );
+  const needle = (options.q ?? '').trim().toLowerCase();
+  const plateNeedle = needle.replace(/\s+/g, '');
+  const searched = byDriver.filter((trip) => {
+    if (!needle) return true;
+    const plate = trip.vehicleRegistration.toLowerCase();
+    const day = trip.startedAt.slice(0, 10);
+    return plate.includes(plateNeedle) || day.includes(needle);
+  });
+  const statusCounts = {
+    all: searched.length,
+    verified: searched.filter((trip) => trip.status === 'verified').length,
+    pending_review: searched.filter((trip) => trip.status === 'pending_review').length,
+    rejected: searched.filter((trip) => trip.status === 'rejected').length,
+  };
+  const matched = options.status
+    ? searched.filter((trip) => trip.status === options.status)
+    : searched;
+  const before = options.before ? Date.parse(options.before) : null;
+  const afterCursor = before
+    ? matched.filter((trip) => Date.parse(trip.startedAt) < before)
+    : matched;
+  const limit = Math.min(Math.max(options.limit ?? 25, 1), 50);
+  const offset = Math.max(options.offset ?? 0, 0);
+  const page = afterCursor.slice(offset, offset + limit);
+  const last = offset + page.length < afterCursor.length ? page.at(-1) : undefined;
+
+  return {
+    drivers: [...MOCK_CAMPAIGN_DRIVERS],
+    trips: page.map(({ driverId: _driverId, ...trip }) => trip),
+    total: afterCursor.length,
+    limit,
+    offset,
+    statusCounts,
+    nextBefore: last?.startedAt ?? null,
+  };
+}
+
+/** Same encoding as the audit trip, minus the driver's side of the money. */
+export function mockCampaignTripDetail(tripId: string) {
+  const detail = mockTripDetail(tripId);
+  if (!detail) return null;
+
+  const [, , position = '1'] = tripId.split('_');
+  const index = Number(position) - 1;
+
+  return {
+    id: detail.id,
+    vehicleRegistration:
+      MOCK_CAMPAIGN_TRIP_PLATES[index % MOCK_CAMPAIGN_TRIP_PLATES.length] ?? 'KA05AB9012',
+    startedAt: detail.startedAt,
+    endedAt: detail.endedAt,
+    distanceKm: detail.distanceKm,
+    advertiserCharge: asMoney(
+      detail.legs.reduce((total, leg) => total + Number(leg.advertiserCharge), 0).toFixed(2),
+    ),
+    status: detail.legs.some((leg) => leg.state === 'PENDING_REVIEW')
+      ? ('pending_review' as const)
+      : ('verified' as const),
+    legs: detail.legs.map(({ driverRate: _rate, driverEarning: _earning, ...leg }) => ({
+      ...leg,
+      visibility: visibilityOfMockLeg(leg),
+    })),
+    places: mockPlacesOf(detail.legs),
+    parked:
+      index > 0
+        ? {
+            seconds: 18 * 60,
+            lat: Number((detail.legs[0]?.path[0]?.lat ?? 12.9716).toFixed(6)),
+            lng: Number((detail.legs[0]?.path[0]?.lng ?? 77.5946).toFixed(6)),
+          }
+        : null,
+  };
+}
+
+function visibilityOfMockLeg(leg: {
+  distanceKm: number;
+  startedAt: string;
+  endedAt: string;
+  state: string;
+}) {
+  if (leg.state !== 'BILLABLE') return null;
+  const seconds = (Date.parse(leg.endedAt) - Date.parse(leg.startedAt)) / 1000;
+  if (!(seconds > 0) || leg.distanceKm < 0.001) return null;
+  const kmh = leg.distanceKm / (seconds / 3600);
+  if (kmh < 1 && seconds > 180) return null;
+  if (kmh < 15) return 'high' as const;
+  if (kmh < 35) return 'medium' as const;
+  return 'low' as const;
+}
+
+const EMPTY_BANDS = { high: '<15 km/h', medium: '15–35 km/h', low: '>35 km/h' };
+
+const EMPTY_WINDOWS = {
+  morning: '07:00–11:00 IST',
+  midday: '11:00–17:00 IST',
+  evening: '17:00–21:00 IST',
+  night: '21:00–07:00 IST',
+};
+
+const EMPTY_WHEN = {
+  version: 'v1.0.0',
+  morningKm: 0,
+  middayKm: 0,
+  eveningKm: 0,
+  nightKm: 0,
+  readableKm: 0,
+  peakShare: 0,
+  windows: EMPTY_WINDOWS,
+};
+
+const MOCK_CAMPAIGN_PLACES = [
+  {
+    kind: 'mall' as const,
+    name: 'Forum Mall',
+    lat: 12.9342,
+    lng: 77.6111,
+    km: 12.4,
+    seconds: 840,
+    visits: 8,
+    source: 'osm' as const,
+  },
+  {
+    kind: 'signal' as const,
+    name: 'Silk Board',
+    lat: 12.9174,
+    lng: 77.6231,
+    km: 9.1,
+    seconds: 620,
+    visits: 14,
+    source: 'osm' as const,
+  },
+  {
+    kind: 'transit' as const,
+    name: 'MG Road Metro',
+    lat: 12.9756,
+    lng: 77.6066,
+    km: 6.8,
+    seconds: 410,
+    visits: 5,
+    source: 'osm' as const,
+  },
+  {
+    kind: 'residential' as const,
+    name: 'Residential',
+    lat: 12.9591,
+    lng: 77.6412,
+    km: 4.2,
+    seconds: 280,
+    visits: 3,
+    source: 'osm' as const,
+  },
+  {
+    kind: 'junction' as const,
+    name: 'Junction',
+    lat: 12.9716,
+    lng: 77.5946,
+    km: 3.1,
+    seconds: 190,
+    visits: 4,
+    source: 'gps' as const,
+  },
+];
+
+function mockPlacesOf(
+  legs: {
+    distanceKm: number;
+    startedAt: string;
+    endedAt: string;
+    state: string;
+    path: { lat: number; lng: number }[];
+  }[],
+) {
+  const places = [];
+  let namedMall = false;
+
+  for (const leg of legs) {
+    const band = visibilityOfMockLeg(leg);
+    if (band !== 'high' && band !== 'medium') continue;
+    const point = leg.path[0];
+    if (!point) continue;
+    const seconds = Math.round((Date.parse(leg.endedAt) - Date.parse(leg.startedAt)) / 1000);
+    if (band === 'high' && !namedMall) {
+      namedMall = true;
+      places.push({
+        kind: 'mall' as const,
+        name: 'Forum Mall',
+        lat: Number(point.lat.toFixed(6)),
+        lng: Number(point.lng.toFixed(6)),
+        km: Number(leg.distanceKm.toFixed(3)),
+        seconds,
+        visits: 2,
+        source: 'osm' as const,
+      });
+      continue;
+    }
+    places.push({
+      kind: band === 'high' ? ('signal' as const) : ('junction' as const),
+      name: band === 'high' ? 'Traffic signal' : 'Junction',
+      lat: Number(point.lat.toFixed(6)),
+      lng: Number(point.lng.toFixed(6)),
+      km: Number(leg.distanceKm.toFixed(3)),
+      seconds,
+      visits: 1,
+      source: band === 'high' ? ('osm' as const) : ('gps' as const),
+    });
+  }
+
+  return places;
+}
+
+/**
+ * 40.5% of the billed kilometres were slow enough to read — the same share
+ * the campaign-detail copy talks about. The three bands sum to verified km.
+ */
+const EMPTY_IMPRESSION_WORKING = {
+  jamDensity: 150,
+  occupantsPerVehicle: 1.5,
+  lineOfSightShare: 0.3,
+  wrapQuality: 0.85,
+  zones: [
+    { zone: 'prime' as const, lanes: 4, pedestrianDensity: 120 },
+    { zone: 'secondary' as const, lanes: 3, pedestrianDensity: 50 },
+    { zone: 'network' as const, lanes: 2, pedestrianDensity: 15 },
+  ],
+  medianObservedKmh: null as number | null,
+  medianBaselineKmh: null as number | null,
+};
+
+const EMPTY_IMPRESSIONS = {
+  modelVersion: 'v1.0.0',
+  verifiedKm: 0,
+  impressions: 0,
+  charge: '0.0000',
+  cpm: '0.00',
+  byZone: [] as { zone: 'prime' | 'secondary' | 'network'; verifiedKm: number; impressions: number; charge: string }[],
+  byDay: [] as { date: string; verifiedKm: number; impressions: number }[],
+  baselineMix: { cellHour: 0, cell: 0, zoneDefault: 0 },
+};
+
+/**
+ * Same billed kilometres as the campaign row, expressed as an audience.
+ * Charge matches the fixture spend so CPM is charge / (impressions / 1000).
+ */
+export function mockCampaignImpressions(campaignId: string) {
+  if (campaignId === 'cmp_02' || campaignId === 'cmp_03') {
+    return {
+      campaignId,
+      campaignName: mockCampaigns.find((campaign) => campaign.id === campaignId)?.name ?? '',
+      ...EMPTY_IMPRESSIONS,
+    };
+  }
+
+  return {
+    campaignId,
+    campaignName: mockCampaigns.find((campaign) => campaign.id === campaignId)?.name ?? 'ABC Summer Sale',
+    modelVersion: 'v1.0.0',
+    verifiedKm: TOTAL_VERIFIED_KM,
+    impressions: TOTAL_IMPRESSIONS,
+    charge: '382161.0000',
+    cpm: '79.29',
+    byZone: [
+      { zone: 'prime' as const, verifiedKm: VERIFIED_KM.prime, impressions: 1_620_000, charge: '186420.0000' },
+      { zone: 'secondary' as const, verifiedKm: VERIFIED_KM.secondary, impressions: 1_410_000, charge: '93210.0000' },
+      { zone: 'network' as const, verifiedKm: VERIFIED_KM.network, impressions: 1_790_000, charge: '102531.0000' },
+    ],
+    byDay: [
+      { date: '2026-08-28', verifiedKm: 6_200.4, impressions: 164_200 },
+      { date: '2026-08-29', verifiedKm: 6_410.1, impressions: 171_800 },
+      { date: '2026-08-30', verifiedKm: 5_980.0, impressions: 155_400 },
+    ],
+    baselineMix: { cellHour: 0.62, cell: 0.24, zoneDefault: 0.14 },
+  };
+}
+
+export function mockCampaignDayImpressions(campaignId: string, date: string) {
+  const report = mockCampaignImpressions(campaignId);
+  const day = report.byDay.find((row) => row.date === date);
+  const share = day && report.impressions > 0 ? day.impressions / report.impressions : 0;
+
+  return {
+    campaignId,
+    date,
+    modelVersion: report.modelVersion,
+    verifiedKm: day?.verifiedKm ?? 0,
+    impressions: day?.impressions ?? 0,
+    charge: day ? (Number(report.charge) * share).toFixed(4) : '0.0000',
+    cpm: report.cpm,
+    byZone: report.byZone.map((row) => ({
+      ...row,
+      verifiedKm: Number((row.verifiedKm * share).toFixed(1)),
+      impressions: Math.round(row.impressions * share),
+      charge: (Number(row.charge) * share).toFixed(4),
+    })),
+    byDay: day ? [day] : [],
+    baselineMix: report.baselineMix,
+    working: {
+      ...EMPTY_IMPRESSION_WORKING,
+      medianObservedKmh: day ? 18.4 : null,
+      medianBaselineKmh: day ? 34.0 : null,
+    },
+  };
+}
+
+export function mockCampaignVisibility(campaignId: string) {
+  if (campaignId === 'cmp_02' || campaignId === 'cmp_03') {
+    return {
+      campaignId,
+      version: 'v1.0.0',
+      highKm: 0,
+      mediumKm: 0,
+      lowKm: 0,
+      classifiedKm: 0,
+      highShare: 0,
+      bands: EMPTY_BANDS,
+      places: [],
+      byKind: [],
+      when: EMPTY_WHEN,
+    };
+  }
+
+  return {
+    campaignId,
+    version: 'v1.0.0',
+    highKm: 75_480.1,
+    mediumKm: 83_700,
+    lowKm: 27_239.9,
+    classifiedKm: TOTAL_VERIFIED_KM,
+    highShare: 0.4049,
+    bands: EMPTY_BANDS,
+    places: MOCK_CAMPAIGN_PLACES,
+    byKind: [
+      { kind: 'mall' as const, km: 12.4, count: 1 },
+      { kind: 'signal' as const, km: 9.1, count: 1 },
+      { kind: 'transit' as const, km: 6.8, count: 1 },
+      { kind: 'residential' as const, km: 4.2, count: 1 },
+      { kind: 'junction' as const, km: 3.1, count: 1 },
+    ],
+    when: {
+      version: 'v1.0.0',
+      morningKm: 42_100,
+      middayKm: 38_200,
+      eveningKm: 51_880.1,
+      nightKm: 27_000,
+      readableKm: 159_180.1,
+      peakShare: 0.5904,
+      windows: EMPTY_WINDOWS,
+    },
   };
 }
 

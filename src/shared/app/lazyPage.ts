@@ -19,7 +19,9 @@ export function lazyPage<T extends object>(
     } catch (error) {
       const stale =
         error instanceof Error &&
-        error.message.includes('Failed to fetch dynamically imported module');
+        (error.message.includes('Failed to fetch dynamically imported module') ||
+          error.message.includes('Outdated Optimize Dep') ||
+          error.message.includes('error loading dynamically imported module'));
 
       if (stale && sessionStorage.getItem(RELOAD_KEY) !== '1') {
         sessionStorage.setItem(RELOAD_KEY, '1');

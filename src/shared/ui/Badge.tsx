@@ -87,9 +87,15 @@ const liveTones: Record<LiveVehicleState, Tone> = {
   GPS_PAUSED: 'danger',
 };
 
-export function LiveStateBadge({ state }: { state: LiveVehicleState }) {
+export function LiveStateBadge({
+  state,
+  className,
+}: {
+  state: LiveVehicleState;
+  className?: string;
+}) {
   return (
-    <Badge tone={liveTones[state]} className="gap-1.5">
+    <Badge tone={liveTones[state]} className={cn('gap-1.5', className)}>
       <span className={cn('size-1.5 rounded-full', liveStateDot(state))} aria-hidden />
       {liveStateLabel(state)}
     </Badge>
