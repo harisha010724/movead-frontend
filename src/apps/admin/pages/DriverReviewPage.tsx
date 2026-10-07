@@ -5,6 +5,7 @@ import { ArrowLeft, Check, FileWarning } from 'lucide-react';
 import { api } from '@/shared/api/client';
 import { toDisplayMessage } from '@/shared/api/errors';
 import { useDriverDetail } from '@/shared/api/hooks';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { Page } from '@/shared/layout/Page';
 import { adminPath } from '@/shared/auth/portals';
@@ -94,7 +95,7 @@ export default function DriverReviewPage() {
                 <DocumentsCard
                   key={vehicle.id}
                   title={formatRegistration(vehicle.registrationNumber)}
-                  description={`${vehicle.category === 'AUTO' ? 'Auto' : 'Cab'}${
+                  description={`${vehicleTypeLabel(vehicle.category)}${
                     vehicle.makeModel ? ` · ${vehicle.makeModel}` : ''
                   }`}
                   badge={

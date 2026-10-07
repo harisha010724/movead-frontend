@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FileSearch, MoreHorizontal, Pencil, Plus, Trash2, Users } from 'lucide-react';
 import { useDrivers, type DriverListing } from '@/shared/api/hooks';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { Page } from '@/shared/layout/Page';
 import { adminPath } from '@/shared/auth/portals';
 import {
@@ -149,7 +150,7 @@ export default function DriversPage() {
                       </Link>
                     </TD>
                     <TD className="numeric text-slate-600">{d.mobile}</TD>
-                    <TD>{d.vehicle ? (d.vehicle.category === 'AUTO' ? 'Auto' : 'Cab') : '—'}</TD>
+                    <TD>{d.vehicle ? vehicleTypeLabel(d.vehicle.category) : '—'}</TD>
                     <TD className="numeric text-slate-600">
                       {d.vehicle ? formatRegistration(d.vehicle.registrationNumber) : '—'}
                     </TD>

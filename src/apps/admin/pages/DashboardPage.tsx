@@ -10,7 +10,9 @@ import {
   Users,
   Wrench,
 } from 'lucide-react';
-import { useAdminDashboard } from '@/shared/api/hooks';
+import { useAdminDashboard, useLivePositions } from '@/shared/api/hooks';
+import { LiveFleetMap } from '@/shared/maps/LiveFleetMap';
+import type { LiveVehicleState } from '@/shared/types/domain';
 import { adminPath } from '@/shared/auth/portals';
 import { Page } from '@/shared/layout/Page';
 import {
@@ -69,9 +71,21 @@ const QUEUES = [
 
 export default function DashboardPage() {
   const [preset, setPreset] = useState<RangePreset>('today');
+  const [picked, setPicked] = useState<string | null>(null);
   const range = useMemo(() => resolveRange(preset), [preset]);
   const comparisonLabel = useMemo(() => shortRangeLabel(previousPeriod(range)), [range]);
   const query = useAdminDashboard(range);
+  const liveQuery = useLivePositions(null);
+  const liveItems = liveQuery.data?.items ?? [];
+  const liveStatuses = useMemo(() => {
+    const states: LiveVehicleState[] = ['RUNNING', 'IDLE', 'GPS_PAUSED', 'OFFLINE'];
+    return states
+      .map((state) => ({
+        state,
+        count: liveItems.filter((row) => row.state === state).length,
+      }))
+      .filter((row) => row.count > 0);
+  }, [liveItems]);
 
   return (
     <Page
@@ -215,10 +229,16 @@ export default function DashboardPage() {
                 <CardHeader title="Fleet right now" />
                 <CardBody>
                   <LiveMapPanel
-                    statuses={data.vehicleStatus}
+                    statuses={liveQuery.isSuccess ? liveStatuses : data.vehicleStatus}
                     viewAllTo="/drivers"
                     height={300}
-                  />
+                  >
+                    <LiveFleetMap
+                      positions={liveItems}
+                      selectedRef={picked}
+                      onSelect={setPicked}
+                    />
+                  </LiveMapPanel>
                 </CardBody>
               </Card>
             </div>

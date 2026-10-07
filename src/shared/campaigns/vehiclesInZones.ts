@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/queryKeys';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { formatDate, formatRegistration } from '@/shared/format';
 import { addIsoDays, campaignDateHasLapsed } from '@/shared/lib/civilDate';
 import { ZONE_MAP_COLORS } from '@/shared/maps/zoneColors';
@@ -18,7 +19,7 @@ export type VehicleZone = ZoneTier | 'network';
 
 export interface AvailableVehicle {
   id: string;
-  vehicleType: 'CAB' | 'AUTO';
+  vehicleType: string;
   /** A stable, opaque reference. Kept for support conversations and logs. */
   publicRef: string;
   /** The plate, shown to every audience — see AC-22.4. */
@@ -98,7 +99,7 @@ export function hasOutline(polygons: ZonePolygons | undefined): boolean {
  */
 export function useVehiclesInZones(
   endpoint: VehiclesEndpoint,
-  vehicleType: 'CAB' | 'AUTO',
+  vehicleType: string,
   city: string,
   polygons: ZonePolygons | undefined,
 ) {
@@ -123,8 +124,8 @@ export function useVehiclesInZones(
   });
 }
 
-export function kindLabel(type: 'CAB' | 'AUTO'): string {
-  return type === 'AUTO' ? 'Auto' : 'Cab';
+export function kindLabel(type: string): string {
+  return vehicleTypeLabel(type);
 }
 
 /**

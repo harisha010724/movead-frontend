@@ -1126,7 +1126,7 @@ export interface MockDriver {
   vehicle: {
     id: string;
     registrationNumber: string;
-    category: 'AUTO' | 'CAB';
+    category: string;
     status: string;
   } | null;
 }
@@ -1172,7 +1172,7 @@ export function addMockDriver(input: {
   name: string;
   mobile: string;
   location?: { city?: string; label: string; lat: number; lng: number };
-  vehicle?: { registrationNumber: string; category: 'AUTO' | 'CAB' } | null;
+  vehicle?: { registrationNumber: string; category: string } | null;
 }): { driver: Omit<MockDriver, 'vehicle'>; vehicle: MockDriver['vehicle'] } {
   const id = `drv_${mockDrivers.length + 1}`;
   const vehicle = input.vehicle
@@ -1220,7 +1220,7 @@ export function vehiclesInZones(
 ): {
   items: {
     id: string;
-    vehicleType: 'AUTO' | 'CAB';
+    vehicleType: string;
     publicRef: string;
     registrationNumber: string;
     areaLabel: string;
@@ -1238,7 +1238,7 @@ export function vehiclesInZones(
   availableCount: number;
 } {
   const body = input as {
-    vehicleType?: 'AUTO' | 'CAB';
+    vehicleType?: string;
     city?: string;
     zonePolygons?: Parameters<typeof zoneForPoint>[1];
   };
@@ -1491,6 +1491,38 @@ export const mockAdvertisers = [
  * Seeded across all four access states, so the Advertisers table shows each
  * badge without anyone having to contrive one.
  */
+export interface MockRateCard {
+  prime: string;
+  secondary: string;
+  network: string;
+  driver: { prime: string; secondary: string; network: string };
+  source: 'default' | 'custom';
+  effectiveFrom: string | null;
+}
+
+export function defaultRateCard(): MockRateCard {
+  return {
+    prime: '5.0000',
+    secondary: '2.0000',
+    network: '1.0000',
+    driver: { prime: '3.0000', secondary: '1.2000', network: '0.6000' },
+    source: 'default',
+    effectiveFrom: null,
+  };
+}
+
+export function customRateCard(prime: string, secondary: string, network: string): MockRateCard {
+  const share = (value: string) => (Number(value) * 0.6).toFixed(4);
+  return {
+    prime,
+    secondary,
+    network,
+    driver: { prime: share(prime), secondary: share(secondary), network: share(network) },
+    source: 'custom',
+    effectiveFrom: new Date().toISOString(),
+  };
+}
+
 export interface MockAdminAdvertiser {
   id: string;
   legalName: string;
@@ -1507,6 +1539,7 @@ export interface MockAdminAdvertiser {
     status: string;
     invitationExpiresAt: string | null;
   } | null;
+  rateCard: MockRateCard;
 }
 
 const hoursFromNow = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
@@ -1529,6 +1562,7 @@ export const mockAdminAdvertisers: MockAdminAdvertiser[] = [
       status: 'ACTIVE',
       invitationExpiresAt: null,
     },
+    rateCard: defaultRateCard(),
   },
   {
     id: 'adv_02',
@@ -1547,6 +1581,7 @@ export const mockAdminAdvertisers: MockAdminAdvertiser[] = [
       status: 'INVITED',
       invitationExpiresAt: hoursFromNow(48),
     },
+    rateCard: customRateCard('4.0000', '1.5000', '0.8000'),
   },
   {
     id: 'adv_03',
@@ -1565,6 +1600,7 @@ export const mockAdminAdvertisers: MockAdminAdvertiser[] = [
       // Lapsed, so the row shows the state that needs a resend.
       invitationExpiresAt: hoursFromNow(-30),
     },
+    rateCard: defaultRateCard(),
   },
   {
     id: 'adv_04',
@@ -1577,6 +1613,7 @@ export const mockAdminAdvertisers: MockAdminAdvertiser[] = [
     createdAt: daysAgo(120),
     // Opened without a contact, so nobody can sign in at all.
     primaryUser: null,
+    rateCard: defaultRateCard(),
   },
 ];
 
@@ -1655,6 +1692,7 @@ export function addMockAdvertiser(input: {
           invitationExpiresAt: hoursFromNow(72),
         }
       : null,
+    rateCard: defaultRateCard(),
   };
 
   mockAdminAdvertisers.unshift(advertiser);

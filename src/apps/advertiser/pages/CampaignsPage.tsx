@@ -26,6 +26,7 @@ import {
   formatINR,
   formatKmWhole,
 } from '@/shared/format';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { canEditCampaign } from '@/shared/schemas/campaign';
 
 export default function CampaignsPage() {
@@ -96,7 +97,7 @@ export default function CampaignsPage() {
                           {c.name}
                         </Link>
                         <span className="block text-xs text-slate-500">
-                          {c.brandName} · {c.city} · {c.vehicleType === 'AUTO' ? 'Auto' : 'Cab'}
+                          {c.brandName} · {c.city} · {vehicleTypeLabel(c.vehicleType)}
                         </span>
                       </TD>
                       <TD>

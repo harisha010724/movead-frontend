@@ -12,7 +12,7 @@ export interface FleetMapPin {
   lng: number;
   title: string;
   subtitle: string;
-  kind: 'CAB' | 'AUTO';
+  kind: string;
   /** Draw it back: on this map it exists, but it is not for sale. */
   muted?: boolean;
 }

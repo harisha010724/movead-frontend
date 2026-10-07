@@ -248,8 +248,9 @@ const handlers: Record<string, Handler> = {
     };
     const primeKm = Number(input.zonePrimeKm || 0);
     const secondaryKm = Number(input.zoneSecondaryKm || 0);
-    const prime = primeKm * 5;
-    const secondary = secondaryKm * 2;
+    const rates = fx.defaultRateCard();
+    const prime = primeKm * Number(rates.prime);
+    const secondary = secondaryKm * Number(rates.secondary);
     const total = prime + secondary;
     const days =
       (Date.parse(`${input.endDate}T00:00:00Z`) - Date.parse(`${input.startDate}T00:00:00Z`)) /
@@ -267,6 +268,7 @@ const handlers: Record<string, Handler> = {
       },
       estimatedVehicles: Math.max(1, Math.ceil(totalKm / (days * 80))),
       estimatedDays: days,
+      rates: { prime: rates.prime, secondary: rates.secondary, network: rates.network },
     });
   },
 
@@ -317,7 +319,7 @@ const handlers: Record<string, Handler> = {
       name: string;
       mobile: string;
       location?: { city?: string; label: string; lat: number; lng: number };
-      vehicle?: { registrationNumber: string; category: 'AUTO' | 'CAB' } | null;
+      vehicle?: { registrationNumber: string; category: string } | null;
     };
 
     if (fx.hasMockMobile(input.mobile)) {
@@ -360,6 +362,8 @@ const handlers: Record<string, Handler> = {
   // than paged, and the mock matches the contract instead of improving on it.
   'GET /v1/admin/advertisers': () => json(fx.mockAdminAdvertisers),
 
+  'GET /v1/campaigns/rate-card': () => json(fx.defaultRateCard()),
+
   'POST /v1/admin/advertisers': (body) => {
     const input = body as {
       legalName: string;
@@ -401,9 +405,13 @@ const handlers: Record<string, Handler> = {
       zonePrimeKm?: string;
       zoneSecondaryKm?: string;
     };
+    const card = input.advertiserId
+      ? (fx.mockAdminAdvertisers.find((a) => a.id === input.advertiserId)?.rateCard ??
+        fx.defaultRateCard())
+      : fx.defaultRateCard();
     const budget = (
-      Number(input.zonePrimeKm || 0) * 5 + Number(input.zoneSecondaryKm || 0) * 2 ||
-      Number(input.budget || 0)
+      Number(input.zonePrimeKm || 0) * Number(card.prime) +
+        Number(input.zoneSecondaryKm || 0) * Number(card.secondary) || Number(input.budget || 0)
     ).toFixed(2);
 
     // AC-34.6: admin cannot commit budget the advertiser has not funded. The
@@ -483,7 +491,7 @@ const paramHandlers: Record<string, ParamHandler> = {
   },
 
   'PATCH /v1/admin/vehicles/*': (id, body) => {
-    const changes = body as { registrationNumber?: string; category?: 'AUTO' | 'CAB' };
+    const changes = body as { registrationNumber?: string; category?: string };
     const driver = fx.mockDrivers.find((d) => d.vehicle?.id === id);
     const vehicle = driver?.vehicle;
     if (!vehicle) return json({ code: 'not_found', message: 'No such vehicle.' }, 404);
@@ -518,6 +526,24 @@ const paramHandlers: Record<string, ParamHandler> = {
     }
     if (changes.category !== undefined) vehicle.category = changes.category;
     return json(vehicle);
+  },
+
+  'GET /v1/admin/advertisers/*/rate-card': (id) => {
+    const advertiser = fx.mockAdminAdvertisers.find((a) => a.id === id);
+    if (!advertiser) return json({ code: 'not_found', message: 'No such advertiser.' }, 404);
+    return json(advertiser.rateCard);
+  },
+
+  'PUT /v1/admin/advertisers/*/rate-card': (id, body) => {
+    const input = body as { prime?: string; secondary?: string; network?: string };
+    const advertiser = fx.mockAdminAdvertisers.find((a) => a.id === id);
+    if (!advertiser) return json({ code: 'not_found', message: 'No such advertiser.' }, 404);
+    advertiser.rateCard = fx.customRateCard(
+      Number(input.prime).toFixed(4),
+      Number(input.secondary).toFixed(4),
+      Number(input.network).toFixed(4),
+    );
+    return json(advertiser.rateCard);
   },
 
   'PATCH /v1/admin/advertisers/*': (id, body) => {

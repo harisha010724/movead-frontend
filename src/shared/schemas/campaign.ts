@@ -1,4 +1,9 @@
 import { z } from 'zod';
+import {
+  VEHICLE_TYPES,
+  defaultAdDimension,
+  isAdDimensionFor,
+} from '@/shared/campaigns/vehicleCatalog';
 import { addIsoDays } from '@/shared/lib/civilDate';
 import type { CampaignLocation, ZonePolygons, ZoneTier } from '@/shared/maps/types';
 
@@ -48,7 +53,8 @@ export const campaignFields = {
     .max(80, 'Campaign name must be 80 characters or fewer'),
   brandName: z.string().trim().min(2, 'Enter the brand this campaign advertises'),
   city: z.string().min(1, 'Select a city'),
-  vehicleType: z.enum(['CAB', 'AUTO'], { message: 'Select a vehicle type' }),
+  vehicleType: z.enum(VEHICLE_TYPES, { message: 'Select a vehicle type' }),
+  adDimension: z.string().min(1, 'Select an ad size'),
   startDate: z.string().min(1, 'Select a start date'),
   endDate: z.string().min(1, 'Select an end date'),
   zonePrimeKm: kmAmount,
@@ -64,14 +70,42 @@ export const campaignFields = {
     .refine((v) => v === '' || Number(v) > 0, 'Target distance must be greater than zero'),
 };
 
-/** Fixed advertiser rates per verified km — Prime ₹5, Secondary ₹2, Network ₹1. */
-export const ZONE_RATES = { prime: 5, secondary: 2, network: 1 } as const;
+/** Platform default advertiser rates per verified km — Prime ₹5, Secondary ₹2, Network ₹1. */
+export const DEFAULT_ZONE_RATES = { prime: 5, secondary: 2, network: 1 } as const;
+export const ZONE_RATES = DEFAULT_ZONE_RATES;
 
-/** Only Prime and Secondary are planned. Network is leftover geography at ₹1/km. */
-export const ZONE_PLAN_FIELDS = [
-  { key: 'zonePrimeKm', tier: 'prime', label: 'Prime', rate: ZONE_RATES.prime },
-  { key: 'zoneSecondaryKm', tier: 'secondary', label: 'Secondary', rate: ZONE_RATES.secondary },
-] as const;
+export type ZoneRates = { prime: number; secondary: number; network: number };
+
+export function zoneRatesFromCard(card?: {
+  prime: string;
+  secondary: string;
+  network: string;
+} | null): ZoneRates {
+  if (!card) return { ...DEFAULT_ZONE_RATES };
+  const prime = Number(card.prime);
+  const secondary = Number(card.secondary);
+  const network = Number(card.network);
+  return {
+    prime: Number.isFinite(prime) ? prime : DEFAULT_ZONE_RATES.prime,
+    secondary: Number.isFinite(secondary) ? secondary : DEFAULT_ZONE_RATES.secondary,
+    network: Number.isFinite(network) ? network : DEFAULT_ZONE_RATES.network,
+  };
+}
+
+/** Only Prime and Secondary are planned. Network is leftover geography. */
+export function zonePlanFields(rates: ZoneRates = DEFAULT_ZONE_RATES) {
+  return [
+    { key: 'zonePrimeKm' as const, tier: 'prime' as const, label: 'Prime', rate: rates.prime },
+    {
+      key: 'zoneSecondaryKm' as const,
+      tier: 'secondary' as const,
+      label: 'Secondary',
+      rate: rates.secondary,
+    },
+  ];
+}
+
+export const ZONE_PLAN_FIELDS = zonePlanFields();
 
 export type ZoneFieldKey = (typeof ZONE_PLAN_FIELDS)[number]['key'];
 
@@ -83,34 +117,42 @@ export function rupeeValue(value: string | undefined): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-export function plannedSpend(values: { zonePrimeKm?: string; zoneSecondaryKm?: string }): number {
+export function plannedSpend(
+  values: { zonePrimeKm?: string; zoneSecondaryKm?: string },
+  rates: ZoneRates = DEFAULT_ZONE_RATES,
+): number {
   return (
-    rupeeValue(values.zonePrimeKm) * ZONE_RATES.prime +
-    rupeeValue(values.zoneSecondaryKm) * ZONE_RATES.secondary
+    rupeeValue(values.zonePrimeKm) * rates.prime + rupeeValue(values.zoneSecondaryKm) * rates.secondary
   );
 }
 
 /** Planned Prime + Secondary spend, as a decimal string. Network is not planned. */
-export function zoneBudgetTotal(values: {
-  zonePrimeKm?: string;
-  zoneSecondaryKm?: string;
-}): string {
-  return plannedSpend(values).toFixed(2);
+export function zoneBudgetTotal(
+  values: {
+    zonePrimeKm?: string;
+    zoneSecondaryKm?: string;
+  },
+  rates: ZoneRates = DEFAULT_ZONE_RATES,
+): string {
+  return plannedSpend(values, rates).toFixed(2);
 }
 
-export function previewZoneEstimate(values: {
-  zonePrimeKm?: string;
-  zoneSecondaryKm?: string;
-  startDate?: string;
-  endDate?: string;
-}): {
+export function previewZoneEstimate(
+  values: {
+    zonePrimeKm?: string;
+    zoneSecondaryKm?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+  rates: ZoneRates = DEFAULT_ZONE_RATES,
+): {
   rows: { key: ZoneFieldKey; label: string; rate: number; amount: number; km: number }[];
   totalAmount: number;
   totalKm: number;
   days: number;
   vehicles: number;
 } {
-  const rows = ZONE_PLAN_FIELDS.map((zone) => {
+  const rows = zonePlanFields(rates).map((zone) => {
     const km = rupeeValue(values[zone.key]);
     return { key: zone.key, label: zone.label, rate: zone.rate, amount: km * zone.rate, km };
   });
@@ -193,8 +235,17 @@ export function withMapRules<T extends z.ZodType<MappedCampaign>>(schema: T) {
   );
 }
 
+function withAdDimensionRules<T extends z.ZodType<{ vehicleType: string; adDimension: string }>>(
+  schema: T,
+) {
+  return schema.refine((data) => isAdDimensionFor(data.vehicleType, data.adDimension), {
+    message: 'Select an ad size that fits this vehicle',
+    path: ['adDimension'],
+  });
+}
+
 /** AC-01: the advertiser creating their own campaign. */
-export const campaignSchema = withDateRules(withMapRules(z.object(campaignFields)));
+export const campaignSchema = withAdDimensionRules(withDateRules(withMapRules(z.object(campaignFields))));
 
 export type CampaignFormValues = z.input<typeof campaignSchema>;
 
@@ -207,21 +258,23 @@ export type CampaignFormValues = z.input<typeof campaignSchema>;
  * configured needs a retained reference back to the request that authorised it
  * (AC-34.5) — without it, nobody can later show who asked for this spend.
  */
-export const adminCampaignSchema = withDateRules(
-  withMapRules(
-    z.object({
-      ...campaignFields,
-      advertiserId: z.string().min(1, 'Select the advertiser this campaign belongs to'),
-      instructionChannel: z.enum(['EMAIL', 'CALL', 'MEETING', 'PURCHASE_ORDER'], {
-        message: 'Select how the advertiser asked for this campaign',
+export const adminCampaignSchema = withAdDimensionRules(
+  withDateRules(
+    withMapRules(
+      z.object({
+        ...campaignFields,
+        advertiserId: z.string().min(1, 'Select the advertiser this campaign belongs to'),
+        instructionChannel: z.enum(['EMAIL', 'CALL', 'MEETING', 'PURCHASE_ORDER'], {
+          message: 'Select how the advertiser asked for this campaign',
+        }),
+        instructionReference: z
+          .string()
+          .trim()
+          .min(3, 'Enter a reference someone else could find later')
+          .max(140, 'Reference must be 140 characters or fewer'),
+        instructionDate: z.string().min(1, 'Select the date of the instruction'),
       }),
-      instructionReference: z
-        .string()
-        .trim()
-        .min(3, 'Enter a reference someone else could find later')
-        .max(140, 'Reference must be 140 characters or fewer'),
-      instructionDate: z.string().min(1, 'Select the date of the instruction'),
-    }),
+    ),
   ),
 );
 
@@ -267,7 +320,8 @@ export function toCampaignFormValues(campaign: {
   name: string;
   brandName: string;
   city: string;
-  vehicleType: 'CAB' | 'AUTO';
+  vehicleType: CampaignFormValues['vehicleType'];
+  adDimension?: string | null;
   startDate: string;
   endDate: string;
   zonePrimeKm?: string;
@@ -286,6 +340,10 @@ export function toCampaignFormValues(campaign: {
     brandName: campaign.brandName,
     city: campaign.city,
     vehicleType: campaign.vehicleType,
+    adDimension:
+      campaign.adDimension && isAdDimensionFor(campaign.vehicleType, campaign.adDimension)
+        ? campaign.adDimension
+        : defaultAdDimension(campaign.vehicleType),
     startDate: campaign.startDate.slice(0, 10),
     endDate: campaign.endDate.slice(0, 10),
     zonePrimeKm: wholeKm(campaign.zonePrimeKm),

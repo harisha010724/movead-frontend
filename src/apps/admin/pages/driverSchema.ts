@@ -34,7 +34,9 @@ export const onboardDriverSchema = z.object({
     .min(1, 'Enter the driver’s email')
     .pipe(z.email('Enter a valid email address'))
     .transform((value) => value.toLowerCase()),
-  vehicleType: z.enum(['AUTO', 'CAB'], { message: 'Select a vehicle type' }),
+  vehicleType: z.enum(['AUTO', 'CAB', 'BUS', 'TRUCK', 'TEMPO'], {
+    message: 'Select a vehicle type',
+  }),
   registrationNumber: z
     .string()
     .min(1, 'Enter the vehicle registration number')

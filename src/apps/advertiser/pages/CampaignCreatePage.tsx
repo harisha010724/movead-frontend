@@ -1,33 +1,45 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Calculator } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Calculator } from 'lucide-react';
 import { api } from '@/shared/api/client';
-import { useCampaign } from '@/shared/api/hooks';
+import { useCampaign, useMyRateCard } from '@/shared/api/hooks';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { toDisplayMessage } from '@/shared/api/errors';
 import { env } from '@/shared/config/env';
 import { Page } from '@/shared/layout/Page';
 import { Button, Card, CardBody, CardHeader, QueryBoundary } from '@/shared/ui';
+import {
+  ADVERTISER_CAMPAIGN_STEPS,
+  ADVERTISER_STEP_FIELDS,
+} from '@/shared/campaigns/campaignSteps';
 import { DateField, FormError, SelectField, TextField } from '@/shared/ui/form';
-import { formatDate, formatINR, formatKm } from '@/shared/format';
+import { formatDate } from '@/shared/format';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
 import type { Campaign, Money } from '@/shared/types/domain';
 import { AdLocationsCard } from '@/shared/campaigns/AdLocationsCard';
 import { CreativeUpload } from '@/shared/campaigns/CreativeUpload';
 import { creativeKindFromName } from '@/shared/campaigns/creativeFile';
+import { CampaignDraftPreview } from '@/shared/campaigns/CampaignDraftPreview';
+import { CampaignWizardShell } from '@/shared/campaigns/CampaignWizardShell';
+import {
+  VEHICLE_TYPE_OPTIONS,
+  adDimensionsFor,
+  defaultAdDimension,
+} from '@/shared/campaigns/vehicleCatalog';
 import { ZoneBudgetFields } from '@/shared/campaigns/ZoneBudgetFields';
+import { CityAutocomplete } from '@/shared/maps/CityAutocomplete';
 import { platformTodayIso } from '@/shared/lib/civilDate';
 import {
   adjustedEndAfterStart,
   campaignSchema,
   canEditCampaign,
   minCampaignEndDate,
-  previewZoneEstimate,
   rupeeValue,
   toCampaignFormValues,
+  zoneRatesFromCard,
   type CampaignFormValues,
   type CampaignLocation,
   type ZonePolygons,
@@ -41,17 +53,12 @@ interface Estimate {
   estimatedDays: number;
 }
 
-const CITIES = [{ value: 'Bengaluru', label: 'Bengaluru' }];
-const VEHICLE_TYPES = [
-  { value: 'CAB', label: 'Cab' },
-  { value: 'AUTO', label: 'Auto' },
-];
-
 const EMPTY_DRAFT: CampaignFormValues = {
   name: '',
   brandName: '',
-  city: 'Bengaluru',
+  city: '',
   vehicleType: 'CAB',
+  adDimension: defaultAdDimension('CAB'),
   startDate: '',
   endDate: '',
   zonePrimeKm: '',
@@ -106,6 +113,8 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
   const queryClient = useQueryClient();
   const [creative, setCreative] = useState<File | null>(null);
   const editing = Boolean(campaign);
+  const myRates = useMyRateCard();
+  const rates = zoneRatesFromCard(campaign?.rateCard ?? myRates.data);
   const today = platformTodayIso();
   const startMin =
     campaign && campaign.startDate.slice(0, 10) < today ? campaign.startDate.slice(0, 10) : today;
@@ -116,6 +125,7 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
     handleSubmit,
     getValues,
     setValue,
+    trigger,
     formState: { errors },
   } = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignSchema),
@@ -123,14 +133,41 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
     defaultValues: campaign ? toCampaignFormValues(campaign) : EMPTY_DRAFT,
   });
 
+  const [step, setStep] = useState(0);
+  const [farthest, setFarthest] = useState(editing ? ADVERTISER_CAMPAIGN_STEPS.length - 1 : 0);
+  const currentStep = ADVERTISER_CAMPAIGN_STEPS[step] ?? ADVERTISER_CAMPAIGN_STEPS[0];
+  const lastStep = step === ADVERTISER_CAMPAIGN_STEPS.length - 1;
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [step]);
+
+  function goTo(index: number) {
+    if (index >= 0 && index <= farthest) setStep(index);
+  }
+
+  async function goNext() {
+    const fields = ADVERTISER_STEP_FIELDS[currentStep.id];
+    if (fields.length > 0) {
+      const ok = await trigger(fields);
+      if (!ok) return;
+    }
+    const next = Math.min(step + 1, ADVERTISER_CAMPAIGN_STEPS.length - 1);
+    setStep(next);
+    setFarthest((reached) => Math.max(reached, next));
+  }
+
   /*
    * `useWatch` types every field as deep-partial. `defaultValues` above seeds
    * all of them and only `setValue` writes the map fields, so where a whole
    * location or polygon is handed on it is asserted back to its real shape.
    */
   const values = useWatch({ control });
-  const preview = previewZoneEstimate(values);
   const hasZoneAmount = rupeeValue(values.zonePrimeKm) + rupeeValue(values.zoneSecondaryKm) > 0;
+  const adSizeOptions = adDimensionsFor(values.vehicleType || 'CAB').map((row) => ({
+    value: row.value,
+    label: `${row.label} · ${row.hint}`,
+  }));
 
   const estimate = useMutation({
     mutationFn: (draft: CampaignFormValues) =>
@@ -159,6 +196,7 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
         brandName: draft.brandName,
         city: draft.city,
         vehicleType: draft.vehicleType,
+        adDimension: draft.adDimension,
         startDate: draft.startDate,
         endDate: draft.endDate,
         zonePrimeKm: draft.zonePrimeKm,
@@ -216,232 +254,290 @@ function CampaignDraftForm({ campaign }: { campaign?: Campaign }) {
       }
     >
       <form
-        onSubmit={(event) => void handleSubmit((draft) => submit.mutate(draft))(event)}
+        onSubmit={(event) => {
+          if (!lastStep) {
+            event.preventDefault();
+            void goNext();
+            return;
+          }
+          void handleSubmit((draft) => submit.mutate(draft))(event);
+        }}
         noValidate
-        className="grid gap-5 lg:grid-cols-3"
       >
-        <div className="space-y-5 lg:col-span-2">
-          <Card>
-            <CardHeader title="Campaign details" />
-            <CardBody className="grid gap-5 sm:grid-cols-2">
-              <TextField
-                label="Campaign name"
-                required
-                placeholder="ABC Summer Sale"
-                error={errors.name?.message}
-                {...register('name')}
-              />
-              <TextField
-                label="Brand name"
-                required
-                placeholder="ABC Retail"
-                error={errors.brandName?.message}
-                {...register('brandName')}
-              />
-
-              <Controller
-                control={control}
-                name="city"
-                render={({ field, fieldState }) => (
-                  <SelectField
-                    label="City"
-                    required
-                    options={CITIES}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    onBlur={field.onBlur}
-                    hint="One city per campaign during the pilot."
-                    {...(fieldState.error?.message
-                      ? { error: fieldState.error.message }
-                      : {})}
-                  />
-                )}
-              />
-              <Controller
-                control={control}
-                name="vehicleType"
-                render={({ field, fieldState }) => (
-                  <SelectField
-                    label="Vehicle type"
-                    required
-                    options={VEHICLE_TYPES}
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    onBlur={field.onBlur}
-                    {...(fieldState.error?.message
-                      ? { error: fieldState.error.message }
-                      : {})}
-                  />
-                )}
-              />
-
-              <Controller
-                control={control}
-                name="startDate"
-                render={({ field, fieldState }) => (
-                  <DateField
-                    label="Start date"
-                    required
-                    value={field.value}
-                    min={startMin}
-                    onChange={(next) => {
-                      field.onChange(next);
-                      const end = adjustedEndAfterStart(next, getValues('endDate'));
-                      if (end !== getValues('endDate')) {
-                        setValue('endDate', end, { shouldValidate: true, shouldTouch: true });
-                      }
-                    }}
-                    onBlur={field.onBlur}
-                    {...(fieldState.error?.message ? { error: fieldState.error.message } : {})}
-                  />
-                )}
-              />
-              <Controller
-                control={control}
-                name="endDate"
-                render={({ field, fieldState }) => (
-                  <DateField
-                    label="End date"
-                    required
-                    value={field.value}
-                    min={values.startDate ? minCampaignEndDate(values.startDate) : startMin}
-                    disabled={!values.startDate}
-                    hint={
-                      values.startDate
-                        ? `Must be after the start date. Earliest ${formatDate(`${minCampaignEndDate(values.startDate)}T00:00:00Z`)}.`
-                        : 'Pick a start date first.'
-                    }
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    {...(fieldState.error?.message ? { error: fieldState.error.message } : {})}
-                  />
-                )}
-              />
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Target kilometres"
-              description="Enter how many kilometres you want in Prime and Secondary. Spend is kilometres × the fixed rate."
+        <CampaignWizardShell
+          steps={ADVERTISER_CAMPAIGN_STEPS}
+          current={step}
+          farthest={farthest}
+          onSelect={goTo}
+          preview={
+            <CampaignDraftPreview
+              farthestStepId={ADVERTISER_CAMPAIGN_STEPS[farthest]?.id}
+              rates={rates}
+              values={{
+                name: values.name,
+                brandName: values.brandName,
+                city: values.city,
+                vehicleType: values.vehicleType,
+                adDimension: values.adDimension,
+                startDate: values.startDate,
+                endDate: values.endDate,
+                zonePrimeKm: values.zonePrimeKm,
+                zoneSecondaryKm: values.zoneSecondaryKm,
+                locations: values.locations as CampaignLocation[] | undefined,
+                zonePolygons: values.zonePolygons as ZonePolygons | undefined,
+                vehiclesCount: values.requestedVehicleIds?.length ?? 0,
+              }}
             />
-            <CardBody>
-              <ZoneBudgetFields register={register} errors={errors} values={values} />
-            </CardBody>
-          </Card>
-
-          <AdLocationsCard
-            city={values.city || 'Bengaluru'}
-            vehicleType={values.vehicleType ?? 'CAB'}
-            locations={(values.locations ?? []) as CampaignLocation[]}
-            polygons={values.zonePolygons as ZonePolygons | undefined}
-            onLocationsChange={(next) =>
-              setValue('locations', next, { shouldValidate: true, shouldTouch: true })
-            }
-            onPolygonsChange={(next) =>
-              setValue('zonePolygons', next, { shouldValidate: true, shouldTouch: true })
-            }
-            endpoint="/v1/campaigns/available-vehicles"
-            selectedIds={values.requestedVehicleIds ?? []}
-            onChange={(ids) =>
-              setValue('requestedVehicleIds', ids, { shouldValidate: true, shouldTouch: true })
-            }
-            {...(errors.locations?.message ? { locationsError: errors.locations.message } : {})}
-            {...(errors.requestedVehicleIds?.message
-              ? { vehiclesError: errors.requestedVehicleIds.message }
-              : {})}
-          />
-
-          <Card>
-            <CardHeader
-              title="Creative"
-              description="Artwork is reviewed before installation is scheduled."
-            />
-            <CardBody>
-              <CreativeUpload
-                file={creative}
-                existing={existingCreative}
-                onChange={setCreative}
-              />
-            </CardBody>
-          </Card>
-        </div>
-
-        <div className="space-y-4">
-          <Card className="sticky top-24">
-            <CardHeader title="Estimated reach" />
-            <CardBody>
-              {hasZoneAmount ? (
-                <dl className="space-y-3 text-[13px]">
-                  {preview.rows.map((row) => (
-                    <div key={row.key} className="flex justify-between gap-3">
-                      <dt className="text-slate-500">
-                        {row.label}
-                        <span className="block text-[11px] text-slate-400">₹{row.rate}/km</span>
-                      </dt>
-                      <dd className="text-right">
-                        <span className="numeric block font-medium text-slate-900">
-                          {formatINR(row.amount.toFixed(2))}
-                        </span>
-                        <span className="numeric block text-[11px] text-slate-500">
-                          {formatKm(row.km)}
-                        </span>
-                      </dd>
-                    </div>
-                  ))}
-                  <div className="flex justify-between border-t border-slate-100 pt-3">
-                    <dt className="text-slate-500">Estimated distance</dt>
-                    <dd className="numeric font-medium text-slate-900">{formatKm(preview.totalKm)}</dd>
-                  </div>
-                  <div className="flex justify-between">
-                    <dt className="text-slate-500">Vehicles needed</dt>
-                    <dd className="numeric font-medium text-slate-900">
-                      {preview.vehicles || '—'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between border-t border-slate-100 pt-3">
-                    <dt className="font-medium text-slate-700">Estimated spend</dt>
-                    <dd className="numeric font-semibold text-slate-900">
-                      {formatINR(preview.totalAmount.toFixed(2))}
-                    </dd>
-                  </div>
-                </dl>
+          }
+          actions={
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {step > 0 ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  leadingIcon={<ArrowLeft className="size-4" />}
+                  onClick={() => goTo(step - 1)}
+                >
+                  Back
+                </Button>
               ) : (
-                <p className="text-[13px] text-slate-500">
-                  Enter Prime and Secondary kilometres to see planned spend at ₹5/km and ₹2/km.
-                  Network (₹1/km) is only billed if a driver leaves those zones.
-                </p>
+                <span />
               )}
+              <div className="flex min-w-0 flex-1 flex-col items-end gap-2 sm:flex-row sm:justify-end">
+                {submit.isError ? <FormError message={toDisplayMessage(submit.error)} /> : null}
+                {lastStep ? (
+                  <Button type="submit" size="lg" loading={submit.isPending}>
+                    {editing ? 'Save changes' : 'Submit for review'}
+                  </Button>
+                ) : (
+                  <Button type="submit" size="lg">
+                    Continue
+                    <ArrowRight className="size-4" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          }
+        >
+          <>
+            {currentStep.id === 'details' ? (
+              <Card>
+                <CardHeader
+                  title="Campaign details"
+                  description="This is how the campaign appears to operations and on reports."
+                />
+                <CardBody className="grid gap-5 sm:grid-cols-2">
+                  <TextField
+                    label="Campaign name"
+                    required
+                    placeholder="ABC Summer Sale"
+                    error={errors.name?.message}
+                    {...register('name')}
+                  />
+                  <TextField
+                    label="Brand name"
+                    required
+                    placeholder="ABC Retail"
+                    error={errors.brandName?.message}
+                    {...register('brandName')}
+                  />
+                </CardBody>
+              </Card>
+            ) : null}
 
-              {estimate.isError ? (
-                <FormError message={toDisplayMessage(estimate.error)} className="mt-3" />
-              ) : null}
+            {currentStep.id === 'vehicle' ? (
+              <Card>
+                <CardHeader
+                  title="Vehicle wrap"
+                  description="The wrap preview on the right updates as you change type and size."
+                />
+                <CardBody className="grid gap-5 sm:grid-cols-2">
+                  <Controller
+                    control={control}
+                    name="city"
+                    render={({ field, fieldState }) => (
+                      <CityAutocomplete
+                        value={field.value}
+                        onChange={field.onChange}
+                        onBlur={field.onBlur}
+                        required
+                        {...(fieldState.error?.message
+                          ? { error: fieldState.error.message }
+                          : {})}
+                      />
+                    )}
+                  />
+                  <Controller
+                    control={control}
+                    name="vehicleType"
+                    render={({ field, fieldState }) => (
+                      <SelectField
+                        label="Vehicle type"
+                        required
+                        options={VEHICLE_TYPE_OPTIONS}
+                        value={field.value}
+                        onValueChange={(next) => {
+                          field.onChange(next);
+                          setValue('adDimension', defaultAdDimension(next), {
+                            shouldValidate: true,
+                          });
+                        }}
+                        onBlur={field.onBlur}
+                        hint="Autos, cabs, buses, trucks and tempos."
+                        {...(fieldState.error?.message
+                          ? { error: fieldState.error.message }
+                          : {})}
+                      />
+                    )}
+                  />
+                  <Controller
+                    control={control}
+                    name="adDimension"
+                    render={({ field, fieldState }) => (
+                      <SelectField
+                        label="Ad size"
+                        required
+                        containerClassName="sm:col-span-2"
+                        options={adSizeOptions}
+                        value={field.value}
+                        onValueChange={field.onChange}
+                        onBlur={field.onBlur}
+                        hint="Wrap coverage for this vehicle. Operations still cuts to the make."
+                        {...(fieldState.error?.message
+                          ? { error: fieldState.error.message }
+                          : {})}
+                      />
+                    )}
+                  />
+                </CardBody>
+              </Card>
+            ) : null}
 
-              <Button
-                type="button"
-                variant="secondary"
-                className="mt-4 w-full"
-                loading={estimate.isPending}
-                leadingIcon={<Calculator className="size-4" />}
-                onClick={() => estimate.mutate(getValues())}
-                disabled={!canEstimate}
-              >
-                Calculate estimate
-              </Button>
+            {currentStep.id === 'plan' ? (
+              <>
+                <Card>
+                  <CardHeader title="Schedule" />
+                  <CardBody className="grid gap-5 sm:grid-cols-2">
+                    <Controller
+                      control={control}
+                      name="startDate"
+                      render={({ field, fieldState }) => (
+                        <DateField
+                          label="Start date"
+                          required
+                          value={field.value}
+                          min={startMin}
+                          onChange={(next) => {
+                            field.onChange(next);
+                            const end = adjustedEndAfterStart(next, getValues('endDate'));
+                            if (end !== getValues('endDate')) {
+                              setValue('endDate', end, { shouldValidate: true, shouldTouch: true });
+                            }
+                          }}
+                          onBlur={field.onBlur}
+                          {...(fieldState.error?.message ? { error: fieldState.error.message } : {})}
+                        />
+                      )}
+                    />
+                    <Controller
+                      control={control}
+                      name="endDate"
+                      render={({ field, fieldState }) => (
+                        <DateField
+                          label="End date"
+                          required
+                          value={field.value}
+                          min={values.startDate ? minCampaignEndDate(values.startDate) : startMin}
+                          disabled={!values.startDate}
+                          hint={
+                            values.startDate
+                              ? `Must be after the start date. Earliest ${formatDate(`${minCampaignEndDate(values.startDate)}T00:00:00Z`)}.`
+                              : 'Pick a start date first.'
+                          }
+                          onChange={field.onChange}
+                          onBlur={field.onBlur}
+                          {...(fieldState.error?.message ? { error: fieldState.error.message } : {})}
+                        />
+                      )}
+                    />
+                  </CardBody>
+                </Card>
+                <Card>
+                  <CardHeader
+                    title="Target kilometres"
+                    description="Enter how many kilometres you want in Prime and Secondary. Spend is kilometres × your rate for each zone."
+                  />
+                  <CardBody className="space-y-4">
+                    <ZoneBudgetFields
+                      register={register}
+                      errors={errors}
+                      values={values}
+                      rates={rates}
+                    />
+                    {estimate.isError ? (
+                      <FormError message={toDisplayMessage(estimate.error)} />
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      loading={estimate.isPending}
+                      leadingIcon={<Calculator className="size-4" />}
+                      onClick={() => estimate.mutate(getValues())}
+                      disabled={!canEstimate}
+                    >
+                      Calculate estimate
+                    </Button>
+                    <p className="text-[11px] text-slate-400">
+                      Planned spend also shows in the preview. You are charged only for verified
+                      kilometres actually driven.
+                    </p>
+                  </CardBody>
+                </Card>
+              </>
+            ) : null}
 
-              <p className="mt-3 text-[11px] text-slate-400">
-                An estimate is not a commitment. You are charged only for verified kilometres
-                actually driven.
-              </p>
-            </CardBody>
-          </Card>
+            {currentStep.id === 'locations' ? (
+              <AdLocationsCard
+                city={values.city || ''}
+                vehicleType={values.vehicleType ?? 'CAB'}
+                locations={(values.locations ?? []) as CampaignLocation[]}
+                polygons={values.zonePolygons as ZonePolygons | undefined}
+                onLocationsChange={(next) =>
+                  setValue('locations', next, { shouldValidate: true, shouldTouch: true })
+                }
+                onPolygonsChange={(next) =>
+                  setValue('zonePolygons', next, { shouldValidate: true, shouldTouch: true })
+                }
+                endpoint="/v1/campaigns/available-vehicles"
+                rates={rates}
+                selectedIds={values.requestedVehicleIds ?? []}
+                onChange={(ids) =>
+                  setValue('requestedVehicleIds', ids, { shouldValidate: true, shouldTouch: true })
+                }
+                {...(errors.locations?.message ? { locationsError: errors.locations.message } : {})}
+                {...(errors.requestedVehicleIds?.message
+                  ? { vehiclesError: errors.requestedVehicleIds.message }
+                  : {})}
+              />
+            ) : null}
 
-          {submit.isError ? <FormError message={toDisplayMessage(submit.error)} /> : null}
-
-          <Button type="submit" className="w-full" size="lg" loading={submit.isPending}>
-            {editing ? 'Save changes' : 'Submit for review'}
-          </Button>
-        </div>
+            {currentStep.id === 'creative' ? (
+              <Card>
+                <CardHeader
+                  title="Creative"
+                  description="Artwork is reviewed before installation is scheduled."
+                />
+                <CardBody>
+                  <CreativeUpload
+                    file={creative}
+                    existing={existingCreative}
+                    onChange={setCreative}
+                  />
+                </CardBody>
+              </Card>
+            ) : null}
+          </>
+        </CampaignWizardShell>
       </form>
     </Page>
   );

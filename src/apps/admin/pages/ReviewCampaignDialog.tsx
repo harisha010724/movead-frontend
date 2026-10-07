@@ -5,6 +5,7 @@ import { toDisplayMessage } from '@/shared/api/errors';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { env } from '@/shared/config/env';
 import { formatDateRange, formatINR, formatKm } from '@/shared/format';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import type { AdminCampaign } from '@/shared/types/domain';
 import { Badge, Button, Dialog } from '@/shared/ui';
 import { FormError } from '@/shared/ui/form';
@@ -54,7 +55,7 @@ export function ReviewCampaignDialog({
       title={campaign?.name ?? 'Campaign'}
       description={
         campaign
-          ? `${campaign.advertiser.brandName} · ${campaign.city} · ${campaign.vehicleType === 'AUTO' ? 'Auto' : 'Cab'}`
+          ? `${campaign.advertiser.brandName} · ${campaign.city} · ${vehicleTypeLabel(campaign.vehicleType)}`
           : undefined
       }
       dismissible={!approve.isPending}

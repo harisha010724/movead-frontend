@@ -54,7 +54,8 @@ function isLiveApiPath(path: string): boolean {
     path.startsWith('/v1/campaigns') ||
     path.startsWith('/v1/notifications') ||
     path.startsWith('/v1/vehicles/available') ||
-    path.startsWith('/v1/reports')
+    path.startsWith('/v1/reports') ||
+    path.includes('branding-proof')
   );
 }
 

@@ -11,6 +11,8 @@ import type {
   Assignment,
   AssignmentSummary,
   AuditDay,
+  BrandingProof,
+  BrandingProofEligible,
   Campaign,
   CampaignDayImpressions,
   CampaignImpressions,
@@ -27,6 +29,7 @@ import type {
   LiveVehicleState,
   Money,
   Paginated,
+  AdvertiserRateCard,
   RateCard,
   ReportExport,
   SpendBreakdown,
@@ -115,6 +118,15 @@ export function useCampaignVisibility(id: string | undefined) {
  * `aggregate`: a live campaign gains trips as drivers finish them, and an
  * advertiser watching the page should not have to reload to see the latest.
  */
+export function useCampaignBrandingProofs(id: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.campaigns.brandingProofs(id ?? ''),
+    queryFn: () => api.get<{ items: BrandingProof[] }>(`/v1/campaigns/${id ?? ''}/branding-proofs`),
+    enabled: Boolean(id),
+    ...freshness.aggregate,
+  });
+}
+
 export function useCampaignDrivers(
   id: string | undefined,
   filters: { q?: string; limit?: number; offset?: number } = {},
@@ -312,7 +324,7 @@ export function useLivePositions(campaignId: string | null, vehicleNumber: strin
 export interface VehicleListing {
   id: string;
   vehicleRef: string;
-  vehicleType: 'AUTO' | 'CAB';
+  vehicleType: string;
   primaryArea: string;
   avgKmPerDay: number;
   zoneMix: { prime: number; secondary: number; network: number };
@@ -321,7 +333,7 @@ export interface VehicleListing {
 
 export interface AvailableFleetVehicle {
   id: string;
-  vehicleType: 'CAB' | 'AUTO';
+  vehicleType: string;
   /** A stable, opaque reference. Kept for support conversations and logs. */
   publicRef: string;
   /** The plate, shown to every audience — see AC-22.4. */
@@ -336,7 +348,7 @@ export interface AvailableFleetVehicle {
   bookedUntil?: string;
 }
 
-export function useAvailableFleet(vehicleType?: 'CAB' | 'AUTO') {
+export function useAvailableFleet(vehicleType?: string) {
   return useQuery({
     queryKey: queryKeys.vehicles.available(vehicleType),
     queryFn: async () => {
@@ -396,6 +408,24 @@ export interface AdvertiserListing {
   createdAt: string;
   /** Null when the account was opened without a contact. Nobody can sign in. */
   primaryUser: AdvertiserContact | null;
+  rateCard?: AdvertiserRateCard;
+}
+
+export function useAdminAdvertiserRateCard(advertiserId: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.advertisers.rateCard(advertiserId ?? ''),
+    queryFn: () => api.get<AdvertiserRateCard>(`/v1/admin/advertisers/${advertiserId}/rate-card`),
+    enabled: Boolean(advertiserId),
+    ...freshness.reference,
+  });
+}
+
+export function useMyRateCard() {
+  return useQuery({
+    queryKey: queryKeys.advertisers.mine(),
+    queryFn: () => api.get<AdvertiserRateCard>('/v1/campaigns/rate-card'),
+    ...freshness.reference,
+  });
 }
 
 /**
@@ -431,7 +461,7 @@ export interface DriverListing {
   vehicle: {
     id: string;
     registrationNumber: string;
-    category: 'AUTO' | 'CAB';
+    category: string;
     status: string;
   } | null;
 }
@@ -619,6 +649,23 @@ export function useInstallationFittingQueue() {
   return useQuery({
     queryKey: queryKeys.installations.pending(),
     queryFn: () => api.get<{ items: Assignment[] }>('/v1/admin/installations/pending'),
+    ...freshness.aggregate,
+  });
+}
+
+export function useBrandingProofWaiting() {
+  return useQuery({
+    queryKey: queryKeys.brandingProofs.waiting(),
+    queryFn: () => api.get<{ items: BrandingProof[] }>('/v1/admin/branding-proofs/waiting'),
+    ...freshness.aggregate,
+  });
+}
+
+export function useBrandingProofEligible() {
+  return useQuery({
+    queryKey: queryKeys.brandingProofs.eligible(),
+    queryFn: () =>
+      api.get<{ items: BrandingProofEligible[] }>('/v1/admin/branding-proofs/eligible'),
     ...freshness.aggregate,
   });
 }

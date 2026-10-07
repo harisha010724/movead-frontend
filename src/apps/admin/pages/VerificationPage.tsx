@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  useBrandingProofWaiting,
   useDrivers,
   useInstallationFittingQueue,
   useInstallationQueue,
@@ -7,11 +8,12 @@ import {
 import { Page } from '@/shared/layout/Page';
 import { Card, CardBody, CardHeader, Tab, TabList, TabPanel, Tabs } from '@/shared/ui';
 
+import { BrandingProofQueue } from './BrandingProofQueue';
 import { DocumentQueue } from './DocumentQueue';
 import { FittingQueue } from './FittingQueue';
 import { InstallationQueue } from './InstallationQueue';
 
-type QueueId = 'documents' | 'fitting' | 'installations' | 'kilometres';
+type QueueId = 'documents' | 'fitting' | 'installations' | 'wrap-photos' | 'kilometres';
 
 const QUEUES: { id: QueueId; label: string; description: string }[] = [
   {
@@ -33,6 +35,12 @@ const QUEUES: { id: QueueId; label: string; description: string }[] = [
       'Wrap photos from every required angle. A vehicle cannot become active — and therefore cannot bill — until its installation is approved (AC-06.10).',
   },
   {
+    id: 'wrap-photos',
+    label: 'Wrap photos',
+    description:
+      'Ask a live vehicle to photograph the advertisement. Sent photos appear on the advertiser campaign — there is no ops approval step. An overdue request pauses earning.',
+  },
+  {
     id: 'kilometres',
     label: 'Flagged kilometres',
     description:
@@ -45,6 +53,7 @@ export default function VerificationPage() {
   // Shared cache with the queues below, so naming the counts costs no extra fetch.
   const installationCount = useInstallationQueue().data?.items.length ?? 0;
   const fittingCount = useInstallationFittingQueue().data?.items.length ?? 0;
+  const wrapCount = useBrandingProofWaiting().data?.items.length ?? 0;
   const documentCount = useDrivers({ status: 'DOCUMENTS_SUBMITTED' }).data?.items.length ?? 0;
 
   return (
@@ -65,7 +74,9 @@ export default function VerificationPage() {
                     ? fittingCount
                     : q.id === 'installations'
                       ? installationCount
-                      : undefined
+                      : q.id === 'wrap-photos'
+                        ? wrapCount
+                        : undefined
               }
             >
               {q.label}
@@ -90,6 +101,8 @@ export default function VerificationPage() {
                   <FittingQueue />
                 ) : q.id === 'installations' ? (
                   <InstallationQueue />
+                ) : q.id === 'wrap-photos' ? (
+                  <BrandingProofQueue />
                 ) : (
                   <p className="text-[13px] text-slate-500">
                     The {q.label.toLowerCase()} queue mounts here.

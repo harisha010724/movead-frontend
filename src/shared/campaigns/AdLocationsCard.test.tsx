@@ -116,7 +116,7 @@ describe('the vehicle picker', () => {
 
     expect(await screen.findByText(PLATE)).toBeInTheDocument();
     const row = rowFor(PLATE);
-    expect(within(row).getByText('Cab')).toBeInTheDocument();
+    expect(within(row).getByText('Car / cab')).toBeInTheDocument();
     expect(within(row).getByText('Vijayanagar, Bengaluru')).toBeInTheDocument();
     expect(within(row).getByText('Prime')).toBeInTheDocument();
     expect(within(row).getByText('Available')).toBeInTheDocument();
@@ -316,7 +316,7 @@ describe('the vehicle picker', () => {
   /* The selection is the form's, so it has to survive the move both ways. */
   it('keeps the selection across opening', async () => {
     const { onChange } = renderCard([vehicle()], { selectedIds: ['veh_1'] });
-    await screen.findByText(PLATE);
+    await screen.findAllByText(PLATE);
 
     expect(screen.getByRole('checkbox')).toBeChecked();
     expect(onChange).not.toHaveBeenCalled();
@@ -358,9 +358,34 @@ describe('the closed card', () => {
     );
 
     expect(await screen.findByText('1 of 2 vehicles selected.')).toBeInTheDocument();
-    expect(screen.getByText('Prime')).toBeInTheDocument();
+    expect(screen.getAllByText('Prime').length).toBeGreaterThan(0);
     expect(screen.getByText('3 corners')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Edit zones and vehicles' })).toBeInTheDocument();
+  });
+
+  it('lists the dropped pins on the closed card', async () => {
+    renderCard(
+      [vehicle()],
+      {
+        selectedIds: ['veh_1'],
+        locations: [
+          {
+            id: 'pin_1',
+            placeId: 'p1',
+            label: 'Koramangala',
+            lat: 12.93,
+            lng: 77.62,
+            tier: 'prime',
+          },
+        ],
+      },
+      { open: false },
+    );
+
+    expect(await screen.findByText('Koramangala')).toBeInTheDocument();
+    expect(screen.getByText('1 pin')).toBeInTheDocument();
+    expect(await screen.findByText(PLATE)).toBeInTheDocument();
+    expect(screen.getByText('Selected vehicles')).toBeInTheDocument();
   });
 
   it('does not claim an empty city is a finished choice', async () => {

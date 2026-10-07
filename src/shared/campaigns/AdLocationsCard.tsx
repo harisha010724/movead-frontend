@@ -18,6 +18,8 @@ import {
   type AvailableVehicle,
   type VehiclesEndpoint,
 } from './vehiclesInZones';
+import { LocationPinList, draftLocationPins } from './LocationPinList';
+import { DEFAULT_ZONE_RATES, type ZoneRates } from '@/shared/schemas/campaign';
 
 /**
  * Where the ad runs, and who will carry it — one card, because they are one
@@ -44,9 +46,10 @@ export function AdLocationsCard({
   onChange,
   locationsError,
   vehiclesError,
+  rates = DEFAULT_ZONE_RATES,
 }: {
   city: string;
-  vehicleType: 'CAB' | 'AUTO';
+  vehicleType: string;
   locations: CampaignLocation[];
   polygons: ZonePolygons | undefined;
   onLocationsChange: (next: CampaignLocation[]) => void;
@@ -56,6 +59,7 @@ export function AdLocationsCard({
   onChange: (ids: string[]) => void;
   locationsError?: string;
   vehiclesError?: string;
+  rates?: ZoneRates;
 }) {
   const ready = hasOutline(polygons);
   const query = useVehiclesInZones(endpoint, vehicleType, city, polygons);
@@ -185,8 +189,9 @@ export function AdLocationsCard({
                 */}
               {!ready ? (
                 <p className="text-[12px] text-slate-500">
-                  Nothing drawn yet, so every vehicle bills at the Network rate of ₹1/km. Draw
-                  an outline to move the ones inside it to Prime or Secondary.
+                  Nothing drawn yet, so every vehicle bills at the Network rate of ₹
+                  {rates.network}/km. Draw an outline to move the ones inside it to Prime or
+                  Secondary.
                 </p>
               ) : null}
 
@@ -226,6 +231,7 @@ export function AdLocationsCard({
             selectedVehicleId={focusedId}
             onVehicleSelect={setFocusedId}
             mapClassName="h-[calc(80vh-13rem)] min-h-[24rem]"
+            networkRate={rates.network}
             {...(locationsError ? { error: locationsError } : {})}
           />
         </div>
@@ -248,6 +254,7 @@ export function AdLocationsCard({
               matched={items.length}
               selected={selectedIds.length}
               loading={query.isPending}
+              rates={rates}
             />
             <Button
               type="button"
@@ -259,6 +266,12 @@ export function AdLocationsCard({
             </Button>
           </div>
 
+          <ClosedPins
+            locations={locations}
+            polygons={polygons}
+            selected={items.filter((row) => selectedSet.has(row.id))}
+          />
+
           {locationsError ? <FormError message={locationsError} className="mt-3" /> : null}
           {vehiclesError ? <FormError message={vehiclesError} className="mt-3" /> : null}
         </CardBody>
@@ -268,7 +281,7 @@ export function AdLocationsCard({
         open={expanded}
         onOpenChange={setExpanded}
         title="Ad locations"
-        description="Pick the vehicles to carry the ad on the left. Outlines drawn on the map set what each one costs per kilometre — Prime ₹5, Secondary ₹2, everywhere else Network ₹1."
+        description={`Pick the vehicles to carry the ad on the left. Outlines drawn on the map set what each one costs per kilometre — Prime ₹${String(rates.prime)}, Secondary ₹${String(rates.secondary)}, everywhere else Network ₹${String(rates.network)}.`}
         size="xl"
         footer={
           <Button type="button" onClick={() => setExpanded(false)}>
@@ -295,12 +308,14 @@ function ZoneSummary({
   matched,
   selected,
   loading,
+  rates,
 }: {
   polygons: ZonePolygons | undefined;
   ready: boolean;
   matched: number;
   selected: number;
   loading: boolean;
+  rates: ZoneRates;
 }) {
   /*
    * The rates lead even while the fleet is still loading. Undrawn is a pricing
@@ -312,8 +327,8 @@ function ZoneSummary({
     return (
       <div className="min-w-0">
         <p className="text-[13px] text-slate-500">
-          No zones drawn yet. Prime is ₹5/km and Secondary ₹2/km; everywhere else is Network at
-          ₹1/km.
+          No zones drawn yet. Prime is ₹{rates.prime}/km and Secondary ₹{rates.secondary}/km;
+          everywhere else is Network at ₹{rates.network}/km.
         </p>
         {selected > 0 ? (
           <p className="mt-1 text-[13px] text-slate-600">
@@ -352,6 +367,65 @@ function ZoneSummary({
             ? 'No vehicles are onboarded in this city yet.'
             : `${selected} of ${matched} vehicle${matched === 1 ? '' : 's'} selected.`}
       </p>
+    </div>
+  );
+}
+
+/**
+ * The pins and chosen vehicles stay on the form so the buyer does not have
+ * to reopen the map to remember what they picked.
+ */
+function ClosedPins({
+  locations,
+  polygons,
+  selected,
+}: {
+  locations: CampaignLocation[];
+  polygons: ZonePolygons | undefined;
+  selected: AvailableVehicle[];
+}) {
+  const pins = draftLocationPins(locations, polygons);
+  if (pins.length === 0 && selected.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-4">
+      {pins.length > 0 ? (
+        <div>
+          <p className="mb-2 text-[12px] font-medium text-slate-500">
+            {pins.length} pin{pins.length === 1 ? '' : 's'}
+          </p>
+          <LocationPinList pins={pins} />
+        </div>
+      ) : null}
+
+      {selected.length > 0 ? (
+        <div>
+          <p className="mb-2 text-[12px] font-medium text-slate-500">
+            Selected vehicles
+          </p>
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200">
+            {selected.map((row) => (
+              <li key={row.id} className="flex items-start gap-2.5 px-3 py-2.5">
+                <MapPin className="mt-0.5 size-3.5 shrink-0 text-slate-400" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="numeric block text-[13px] font-medium text-slate-800">
+                    {vehicleNumber(row)}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-slate-500">
+                    <span className="truncate">{areaLabel(row)}</span>
+                    <span
+                      className="shrink-0 rounded-full px-1.5 py-px text-[10px] font-medium text-white"
+                      style={{ background: ZONE_CHIP[row.zone].background }}
+                    >
+                      {ZONE_CHIP[row.zone].label}
+                    </span>
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }

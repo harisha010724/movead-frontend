@@ -63,12 +63,22 @@ export type VehicleAvailability = 'available' | 'booked' | 'pending';
 /** Live operating state, distinct from vehicle lifecycle status. */
 export type LiveVehicleState = 'RUNNING' | 'IDLE' | 'OFFLINE' | 'GPS_PAUSED';
 
-export type VehicleType = 'AUTO' | 'CAB';
+export type VehicleType = 'AUTO' | 'CAB' | 'BUS' | 'TRUCK' | 'TEMPO';
 
 export interface RateCard {
   advertiser: Record<ZoneTier, Money>;
   driver: Record<ZoneTier, Money>;
   effectiveFrom: string;
+}
+
+/** Per-advertiser ₹/km card operations set. Used on create and estimate. */
+export interface AdvertiserRateCard {
+  prime: Money;
+  secondary: Money;
+  network: Money;
+  driver: { prime: Money; secondary: Money; network: Money };
+  source: 'default' | 'custom';
+  effectiveFrom: string | null;
 }
 
 export interface ZoneBreakdown {
@@ -97,6 +107,7 @@ export interface Campaign {
   status: CampaignStatus;
   city: string;
   vehicleType: VehicleType;
+  adDimension?: string | null;
   startDate: string;
   endDate: string;
   budget: Money;
@@ -127,6 +138,8 @@ export interface Campaign {
   verifiedKm: number;
   /** Reach estimate only — see the note on AdvertiserDashboard.impressions. */
   impressions: number;
+  /** Advertiser ₹/km snapshotted when this campaign was created. */
+  rateCard?: { prime: Money; secondary: Money; network: Money };
 }
 
 export interface AdminCampaign extends Campaign {
@@ -161,6 +174,56 @@ export type InstallationStatus = (typeof INSTALLATION_STATUSES)[number];
 
 export const PHOTO_ANGLES = ['FRONT', 'REAR', 'LEFT', 'RIGHT'] as const;
 export type PhotoAngle = (typeof PHOTO_ANGLES)[number];
+
+export const BRANDING_ANGLES = [...PHOTO_ANGLES, 'AD_CLOSEUP'] as const;
+export type BrandingAngle = (typeof BRANDING_ANGLES)[number];
+
+export const BRANDING_PROOF_STATUSES = [
+  'REQUESTED',
+  'IN_PROGRESS',
+  'SUBMITTED',
+  'APPROVED',
+  'REJECTED',
+] as const;
+export type BrandingProofStatus = (typeof BRANDING_PROOF_STATUSES)[number];
+
+export interface BrandingProofPhoto {
+  id: string;
+  angle: BrandingAngle;
+  fileName: string;
+  lat: number;
+  lon: number;
+  capturedAt: string;
+  uploadedAt: string;
+}
+
+export interface BrandingProof {
+  id: string;
+  assignmentId: string;
+  campaignId: string;
+  campaignName: string;
+  registrationNumber: string;
+  driverName: string;
+  vehicleCategory: string;
+  status: BrandingProofStatus;
+  dueAt: string;
+  requestedAt: string;
+  submittedAt: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  photoCount: number;
+  required: BrandingAngle[];
+  uploaded: BrandingAngle[];
+  photos: BrandingProofPhoto[];
+}
+
+export interface BrandingProofEligible {
+  assignmentId: string;
+  campaignId: string;
+  campaignName: string;
+  registrationNumber: string;
+  driverName: string;
+}
 
 export interface Assignment {
   id: string;
@@ -224,7 +287,7 @@ export interface DriverProfile {
   canTrack: boolean;
   photoUrl: string | null;
   joinedAt: string;
-  vehicle: { registrationNumber: string; category: 'CAB' | 'AUTO'; makeModel: string } | null;
+  vehicle: { registrationNumber: string; category: string; makeModel: string } | null;
 }
 
 export type DocumentKind = 'RC' | 'LICENCE' | 'INSURANCE' | 'POLLUTION' | 'PERMIT' | 'OTHER';

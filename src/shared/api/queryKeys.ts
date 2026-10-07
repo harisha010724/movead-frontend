@@ -35,6 +35,7 @@ export const queryKeys = {
     trips: (id: string, filters?: Record<string, unknown>) =>
       ['campaigns', id, 'trips', filters ?? {}] as const,
     trip: (id: string, tripId: string) => ['campaigns', id, 'trips', tripId] as const,
+    brandingProofs: (id: string) => ['campaigns', id, 'branding-proofs'] as const,
   },
 
   installations: {
@@ -42,6 +43,11 @@ export const queryKeys = {
     /** Wraps still to be fitted, which is the queue before `queue()`. */
     pending: () => ['installations', 'pending'] as const,
     photos: (assignmentId: string) => ['installations', assignmentId, 'photos'] as const,
+  },
+
+  brandingProofs: {
+    waiting: () => ['branding-proofs', 'waiting'] as const,
+    eligible: () => ['branding-proofs', 'eligible'] as const,
   },
 
   dashboard: {
@@ -67,6 +73,8 @@ export const queryKeys = {
     list: () => ['advertisers', 'list'] as const,
     /** The operations list, which is a different endpoint and shape. */
     admin: () => ['advertisers', 'admin'] as const,
+    rateCard: (advertiserId: string) => ['advertisers', 'rate-card', advertiserId] as const,
+    mine: () => ['advertisers', 'rate-card', 'mine'] as const,
   },
 
   drivers: {

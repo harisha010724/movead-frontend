@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Calendar, Car, Eye, Route, Users, Wallet } from 'lucide-react';
-import { useAdvertiserDashboard, useCampaigns } from '@/shared/api/hooks';
+import { useAdvertiserDashboard, useCampaigns, useLivePositions } from '@/shared/api/hooks';
+import { LiveFleetMap } from '@/shared/maps/LiveFleetMap';
+import type { LiveVehicleState } from '@/shared/types/domain';
 import { TopBar } from '@/shared/layout/TopBar';
 import {
   AlertList,
@@ -30,6 +32,7 @@ import {
   formatDateRange,
   formatINR,
   formatKmWhole,
+  formatRegistration,
 } from '@/shared/format';
 import {
   previousPeriod,
@@ -51,11 +54,40 @@ export default function DashboardPage() {
   const [trendGrain, setTrendGrain] = useState<'daily' | 'weekly'>('daily');
   const [vehicleFilter, setVehicleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [picked, setPicked] = useState<string | null>(null);
   const [dayFilter, setDayFilter] = useState('all');
 
   const campaignsQuery = useCampaigns();
   const campaigns = campaignsQuery.data?.items ?? [];
   const selected = campaigns.find((c) => c.id === campaignId) ?? campaigns[0] ?? null;
+  const liveQuery = useLivePositions(selected?.id ?? null);
+  const liveItems = liveQuery.data?.items ?? [];
+
+  useEffect(() => {
+    setVehicleFilter('all');
+    setStatusFilter('all');
+    setPicked(null);
+  }, [selected?.id]);
+
+  const liveStatuses = useMemo(() => {
+    const states: LiveVehicleState[] = ['RUNNING', 'IDLE', 'GPS_PAUSED', 'OFFLINE'];
+    return states
+      .map((state) => ({
+        state,
+        count: liveItems.filter((row) => row.state === state).length,
+      }))
+      .filter((row) => row.count > 0);
+  }, [liveItems]);
+
+  const visiblePositions = useMemo(() => {
+    return liveItems.filter((row) => {
+      if (vehicleFilter !== 'all' && row.vehicleRef !== vehicleFilter) return false;
+      if (statusFilter !== 'all' && row.state !== statusFilter) return false;
+      return true;
+    });
+  }, [liveItems, vehicleFilter, statusFilter]);
+
+  const selectedRef = vehicleFilter !== 'all' ? vehicleFilter : picked;
 
   const range = useMemo(
     () => resolveRange(preset, selected?.startDate),
@@ -189,8 +221,17 @@ export default function DashboardPage() {
                             label="Filter by vehicle"
                             subtle
                             value={vehicleFilter}
-                            onValueChange={setVehicleFilter}
-                            options={[{ value: 'all', label: 'All Vehicles' }]}
+                            onValueChange={(next) => {
+                              setVehicleFilter(next);
+                              setPicked(next === 'all' ? null : next);
+                            }}
+                            options={[
+                              { value: 'all', label: 'All Vehicles' },
+                              ...liveItems.map((row) => ({
+                                value: row.vehicleRef,
+                                label: formatRegistration(row.vehicleRef),
+                              })),
+                            ]}
                           />
                           <InlineSelect
                             label="Filter by status"
@@ -201,6 +242,7 @@ export default function DashboardPage() {
                               { value: 'all', label: 'All Status' },
                               { value: 'RUNNING', label: 'Running' },
                               { value: 'IDLE', label: 'Idle' },
+                              { value: 'GPS_PAUSED', label: 'GPS paused' },
                               { value: 'OFFLINE', label: 'Offline' },
                             ]}
                           />
@@ -209,10 +251,17 @@ export default function DashboardPage() {
                     />
                     <CardBody>
                       <LiveMapPanel
-                        statuses={data.vehicleStatus}
+                        statuses={liveQuery.isSuccess ? liveStatuses : data.vehicleStatus}
                         viewAllTo="/tracking"
                         height={400}
-                      />
+                      >
+                        <LiveFleetMap
+                          positions={visiblePositions}
+                          selectedRef={selectedRef}
+                          onSelect={setPicked}
+                          city={selected?.city ?? 'Bengaluru'}
+                        />
+                      </LiveMapPanel>
                     </CardBody>
                   </Card>
 

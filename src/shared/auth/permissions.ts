@@ -61,6 +61,8 @@ export const ADMIN_PERMISSIONS = {
 
   installationReview: 'installation.review',
   installationApprove: 'installation.approve',
+  brandingReview: 'branding.review',
+  brandingApprove: 'branding.approve',
 
   /** Flagged kilometres awaiting a decision. */
   segmentReview: 'segment.review',

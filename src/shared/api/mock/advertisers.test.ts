@@ -329,3 +329,31 @@ describe('POST /v1/admin/users/{id}/resend-invitation', () => {
     expect(response.status).toBe(404);
   });
 });
+
+describe('PUT /v1/admin/advertisers/{id}/rate-card', () => {
+  it('writes a custom card onto the advertiser', async () => {
+    const previous = mockAdminAdvertisers.find((a) => a.id === 'adv_01')?.rateCard;
+    const response = await mockFetch('PUT', '/v1/admin/advertisers/adv_01/rate-card', {
+      prime: '4',
+      secondary: '1.5',
+      network: '0.8',
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      prime: string;
+      source: string;
+      driver: { prime: string };
+    };
+    expect(body.source).toBe('custom');
+    expect(body.prime).toBe('4.0000');
+    expect(body.driver.prime).toBe('2.4000');
+
+    const read = await mockFetch('GET', '/v1/admin/advertisers/adv_01/rate-card');
+    const card = (await read.json()) as { prime: string };
+    expect(card.prime).toBe('4.0000');
+
+    const row = mockAdminAdvertisers.find((a) => a.id === 'adv_01');
+    if (row && previous) row.rateCard = previous;
+  });
+});

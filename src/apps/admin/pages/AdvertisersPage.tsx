@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, MoreHorizontal, Pencil, Send } from 'lucide-react';
+import { Building2, IndianRupee, MoreHorizontal, Pencil, Send } from 'lucide-react';
 import { useAdminAdvertisers, type AdvertiserListing } from '@/shared/api/hooks';
 import { Page } from '@/shared/layout/Page';
 import {
@@ -22,10 +22,11 @@ import {
 } from '@/shared/ui';
 import { Can } from '@/shared/auth/guards';
 import { ADMIN_PERMISSIONS as PERMISSIONS } from '@/shared/auth/permissions';
-import { formatDate } from '@/shared/format';
+import { formatDate, formatRate } from '@/shared/format';
 import { EditAdvertiserDialog } from './EditAdvertiserDialog';
 import { OnboardAdvertiserDialog } from './OnboardAdvertiserDialog';
 import { ResendInvitationDialog } from './ResendInvitationDialog';
+import { SetPricesDialog } from './SetPricesDialog';
 
 const statusTone = (status: AdvertiserListing['status']) => {
   if (status === 'ACTIVE') return 'success' as const;
@@ -56,6 +57,7 @@ function contactState(user: AdvertiserListing['primaryUser']) {
 export default function AdvertisersPage() {
   const [onboarding, setOnboarding] = useState(false);
   const [editing, setEditing] = useState<AdvertiserListing | null>(null);
+  const [pricing, setPricing] = useState<AdvertiserListing | null>(null);
   const [resending, setResending] = useState<AdvertiserListing | null>(null);
   const query = useAdminAdvertisers();
 
@@ -91,7 +93,7 @@ export default function AdvertisersPage() {
 
         <QueryBoundary
           query={query}
-          loading={<SkeletonTable rows={4} columns={6} />}
+          loading={<SkeletonTable rows={4} columns={7} />}
           isEmpty={(data) => data.length === 0}
           empty={
             <EmptyState
@@ -114,6 +116,7 @@ export default function AdvertisersPage() {
                   <TH>Primary user</TH>
                   <TH>Access</TH>
                   <TH>Account</TH>
+                  <TH>Prices</TH>
                   <TH>Onboarded</TH>
                   <TH>
                     <span className="sr-only">Actions</span>
@@ -156,6 +159,14 @@ export default function AdvertisersPage() {
                           {advertiser.status.toLowerCase()}
                         </Badge>
                       </TD>
+                      <TD>
+                        <span className="numeric text-slate-800">
+                          {formatRate(advertiser.rateCard?.prime)}
+                        </span>
+                        <span className="mt-0.5 block text-[12px] text-slate-500">
+                          {advertiser.rateCard?.source === 'custom' ? 'Custom' : 'Default'}
+                        </span>
+                      </TD>
                       <TD className="text-slate-600">{formatDate(advertiser.createdAt)}</TD>
                       <TD className="w-px">
                         <Menu
@@ -175,6 +186,15 @@ export default function AdvertisersPage() {
                               onSelect={openAfterMenuCloses(() => setEditing(advertiser))}
                             >
                               Edit advertiser
+                            </MenuItem>
+                          </Can>
+
+                          <Can permission={PERMISSIONS.rateChange}>
+                            <MenuItem
+                              icon={IndianRupee}
+                              onSelect={openAfterMenuCloses(() => setPricing(advertiser))}
+                            >
+                              Set prices
                             </MenuItem>
                           </Can>
 
@@ -206,6 +226,12 @@ export default function AdvertisersPage() {
         advertiser={editing}
         onOpenChange={() => {
           setEditing(null);
+        }}
+      />
+      <SetPricesDialog
+        advertiser={pricing}
+        onOpenChange={() => {
+          setPricing(null);
         }}
       />
       <ResendInvitationDialog

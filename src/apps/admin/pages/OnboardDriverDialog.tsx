@@ -9,6 +9,8 @@ import { queryKeys } from '@/shared/api/queryKeys';
 import { formatRegistration } from '@/shared/format';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
 import { Button, Dialog } from '@/shared/ui';
+import { VEHICLE_TYPE_OPTIONS } from '@/shared/campaigns/vehicleCatalog';
+import { CityAutocomplete } from '@/shared/maps/CityAutocomplete';
 import { LocationPinPicker } from '@/shared/maps/LocationPinPicker';
 import { FormError, SelectField, TextField } from '@/shared/ui/form';
 import {
@@ -31,20 +33,13 @@ interface OnboardedDriver {
   invitationEmailed: boolean;
 }
 
-const VEHICLE_TYPES = [
-  { value: 'CAB', label: 'Cab' },
-  { value: 'AUTO', label: 'Auto' },
-];
-
-const CITIES = [{ value: 'Bengaluru', label: 'Bengaluru' }];
-
 const EMPTY: OnboardDriverValues = {
   name: '',
   mobile: '',
   email: '',
   vehicleType: 'CAB',
   registrationNumber: '',
-  city: 'Bengaluru',
+  city: '',
   location: { label: '', lat: 0, lng: 0 },
 };
 
@@ -318,7 +313,7 @@ export function OnboardDriverDialog({
                 <SelectField
                   label="Vehicle type"
                   required
-                  options={VEHICLE_TYPES}
+                    options={VEHICLE_TYPE_OPTIONS}
                   value={field.value}
                   onValueChange={field.onChange}
                   onBlur={field.onBlur}
@@ -331,14 +326,12 @@ export function OnboardDriverDialog({
               control={control}
               name="city"
               render={({ field, fieldState }) => (
-                <SelectField
-                  label="City"
-                  required
-                  options={CITIES}
+                <CityAutocomplete
                   value={field.value}
-                  onValueChange={field.onChange}
+                  onChange={field.onChange}
                   onBlur={field.onBlur}
-                  hint="One city during the pilot."
+                  required
+                  hint="Search and pick the city this driver operates in."
                   {...(fieldState.error?.message ? { error: fieldState.error.message } : {})}
                 />
               )}

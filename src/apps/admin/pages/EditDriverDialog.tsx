@@ -8,15 +8,11 @@ import { ApiError, toDisplayMessage } from '@/shared/api/errors';
 import type { DriverListing } from '@/shared/api/hooks';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { VALIDATION_MODE } from '@/shared/lib/formConfig';
+import { VEHICLE_TYPE_OPTIONS, VEHICLE_TYPES } from '@/shared/campaigns/vehicleCatalog';
 import { LocationPinPicker } from '@/shared/maps/LocationPinPicker';
 import { Button, Dialog } from '@/shared/ui';
 import { FormError, SelectField, TextField } from '@/shared/ui/form';
 import { editDriverSchema, type EditDriverPayload, type EditDriverValues } from './driverSchema';
-
-const VEHICLE_TYPES = [
-  { value: 'CAB', label: 'Cab' },
-  { value: 'AUTO', label: 'Auto' },
-];
 
 /**
  * Corrects what onboarding captured.
@@ -64,7 +60,11 @@ export function EditDriverDialog({
     reset({
       name: driver.name,
       mobile: driver.mobile,
-      vehicleType: driver.vehicle?.category ?? 'CAB',
+      vehicleType: VEHICLE_TYPES.includes(
+        driver.vehicle?.category as (typeof VEHICLE_TYPES)[number],
+      )
+        ? (driver.vehicle?.category as (typeof VEHICLE_TYPES)[number])
+        : 'CAB',
       registrationNumber: driver.vehicle?.registrationNumber ?? '',
       location: driver.location
         ? { label: driver.location.label, lat: driver.location.lat, lng: driver.location.lng }
@@ -205,7 +205,7 @@ export function EditDriverDialog({
                   label="Vehicle type"
                   required
                   disabled={plateLocked || !driver?.vehicle}
-                  options={VEHICLE_TYPES}
+                    options={VEHICLE_TYPE_OPTIONS}
                   value={field.value}
                   onValueChange={field.onChange}
                   onBlur={field.onBlur}

@@ -33,6 +33,7 @@ import {
   formatRegistration,
   formatSignedPercent,
 } from '@/shared/format';
+import { adDimensionLabel, vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { cn } from '@/shared/lib/cn';
 import { Page } from '@/shared/layout/Page';
 import { canEditCampaign } from '@/shared/schemas/campaign';
@@ -55,6 +56,7 @@ import {
 } from '@/shared/ui';
 import { resolveRange } from '@/shared/lib/dateRange';
 import type { Campaign, CampaignVisibility } from '@/shared/types/domain';
+import { WrapPhotos } from './WrapPhotos';
 
 /**
  * One campaign, who is carrying it, and what the driving has amounted to.
@@ -92,7 +94,7 @@ function CampaignDetail({ campaign }: { campaign: Campaign }) {
       title={campaign.name}
       backTo="/campaigns"
       badge={<CampaignStatusBadge status={campaign.status} />}
-      greeting={`${campaign.brandName} · ${campaign.city} · ${campaign.vehicleType === 'AUTO' ? 'Auto' : 'Cab'} · ${formatDateRange(campaign.startDate, campaign.endDate)}`}
+      greeting={`${campaign.brandName} · ${campaign.city} · ${vehicleTypeLabel(campaign.vehicleType)}${campaign.adDimension ? ` · ${adDimensionLabel(campaign.vehicleType, campaign.adDimension)}` : ''} · ${formatDateRange(campaign.startDate, campaign.endDate)}`}
       controls={
         <Can permission={PERMISSIONS.campaignCreate}>
           {canEditCampaign(campaign.status) ? (
@@ -110,6 +112,7 @@ function CampaignDetail({ campaign }: { campaign: Campaign }) {
       <div className="space-y-5">
         <Figures campaign={campaign} dashboard={dashboard.data} visibility={visibility.data} />
         <DriversTable campaignId={campaign.id} />
+        <WrapPhotos campaignId={campaign.id} />
       </div>
     </Page>
   );

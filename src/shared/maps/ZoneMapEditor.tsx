@@ -27,7 +27,7 @@ export interface ZoneVehiclePin {
   lng: number;
   title: string;
   subtitle: string;
-  kind: 'CAB' | 'AUTO';
+  kind: string;
   /** Draw it back: it is in the zone, but it cannot be ordered. */
   muted?: boolean;
 }
@@ -67,6 +67,7 @@ export function ZoneMapEditor({
   selectedVehicleId,
   onVehicleSelect,
   mapClassName,
+  networkRate = 1,
 }: {
   city: string;
   locations: CampaignLocation[];
@@ -79,6 +80,7 @@ export function ZoneMapEditor({
   onVehicleSelect?: (id: string) => void;
   /** The height the map is given. The caller knows how much room it has. */
   mapClassName?: string;
+  networkRate?: number;
 }) {
   const apiKey = env.googleMapsApiKey;
   const mapEl = useRef<HTMLDivElement>(null);
@@ -769,7 +771,7 @@ export function ZoneMapEditor({
 
       <p className="rounded-lg bg-slate-50 px-3 py-2.5 text-[12px] text-slate-600">
         <span className="font-medium text-slate-800">Network</span> is not drawn. When a driver
-        leaves Prime and Secondary, those kilometres are Network at ₹1/km.
+        leaves Prime and Secondary, those kilometres are Network at ₹{networkRate}/km.
       </p>
 
       <div className="relative">

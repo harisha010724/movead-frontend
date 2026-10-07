@@ -15,6 +15,7 @@ const valid = {
   brandName: 'ABC Retail',
   city: 'Bengaluru',
   vehicleType: 'CAB' as const,
+  adDimension: 'WRAP_180',
   startDate: '2026-09-01',
   endDate: '2026-09-30',
   zonePrimeKm: '2000',
@@ -48,6 +49,12 @@ describe('campaignSchema', () => {
 
   it('treats target distance as optional', () => {
     expect(campaignSchema.safeParse({ ...valid, targetKm: '' }).success).toBe(true);
+  });
+
+  it('refuses a wrap size that does not belong on that vehicle', () => {
+    expect(errorFor({ ...valid, vehicleType: 'BUS', adDimension: 'WRAP_180' }, 'adDimension')).toMatch(
+      /fits this vehicle/,
+    );
   });
 
   it('requires at least one vehicle to carry the ad', () => {
@@ -133,6 +140,20 @@ describe('campaignSchema', () => {
     expect(preview.rows.map((row) => row.amount)).toEqual([20000, 20000]);
     expect(preview.totalAmount).toBe(40000);
     expect(preview.vehicles).toBeGreaterThan(0);
+  });
+
+  it('turns planned kilometres into spend at a custom card', () => {
+    const preview = previewZoneEstimate(
+      {
+        zonePrimeKm: '4000',
+        zoneSecondaryKm: '10000',
+        startDate: '2026-09-01',
+        endDate: '2026-09-14',
+      },
+      { prime: 4, secondary: 1.5, network: 0.8 },
+    );
+    expect(preview.rows.map((row) => row.amount)).toEqual([16000, 15000]);
+    expect(preview.totalAmount).toBe(31000);
   });
 });
 

@@ -21,5 +21,6 @@ export { AlertList, type AlertItem, type AlertSeverity } from './AlertList';
 export { Tabs, TabList, Tab, TabPanel } from './Tabs';
 export { Menu, MenuItem, MenuLabel, MenuSeparator } from './Menu';
 export { Dialog } from './Dialog';
+export { FormStepper, type FormStep } from './FormStepper';
 export { Tooltip, TooltipProvider } from './Tooltip';
 export { Toaster, toast, type ToastOptions, type ToastVariant } from './toast';

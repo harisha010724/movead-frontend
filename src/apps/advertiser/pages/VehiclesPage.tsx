@@ -8,13 +8,10 @@ import { Page } from '@/shared/layout/Page';
 import { FleetMap } from '@/shared/maps/FleetMap';
 import { Badge, Button, Card, CardHeader, EmptyState, QueryBoundary } from '@/shared/ui';
 import { cn } from '@/shared/lib/cn';
+import { VEHICLE_TYPE_OPTIONS, vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import type { VehicleAvailability } from '@/shared/types/domain';
 
-type Filter = 'ALL' | 'CAB' | 'AUTO';
-
-function kindLabel(type: 'CAB' | 'AUTO'): string {
-  return type === 'AUTO' ? 'Auto' : 'Cab';
-}
+type Filter = 'ALL' | string;
 
 const AVAILABILITY: Record<
   VehicleAvailability,
@@ -32,7 +29,7 @@ function availability(row: AvailableFleetVehicle): { label: string; tone: 'succe
 /** "Cab · KA 01 AB 1234" — the plate, falling back to the opaque reference. */
 function vehicleTitle(row: AvailableFleetVehicle): string {
   const number = row.registrationNumber ? formatRegistration(row.registrationNumber) : row.publicRef;
-  return `${kindLabel(row.vehicleType)} · ${number}`;
+  return `${vehicleTypeLabel(row.vehicleType)} · ${number}`;
 }
 
 /**
@@ -89,10 +86,9 @@ export default function VehiclesPage() {
                 <div className="flex rounded-lg bg-slate-100 p-0.5">
                   {(
                     [
-                      ['ALL', 'All'],
-                      ['CAB', 'Cabs'],
-                      ['AUTO', 'Autos'],
-                    ] as const
+                      ['ALL', 'All'] as const,
+                      ...VEHICLE_TYPE_OPTIONS.map((row) => [row.value, row.label] as const),
+                    ]
                   ).map(([value, label]) => (
                     <button
                       key={value}
@@ -116,7 +112,7 @@ export default function VehiclesPage() {
               <ul className="min-h-[22rem] space-y-2 overflow-y-auto border-slate-100 px-5 pb-5 lg:min-h-0 lg:border-r">
                 {items.length === 0 ? (
                   <li className="rounded-xl bg-slate-50 px-4 py-8 text-center text-[13px] text-slate-500">
-                    No {filter === 'CAB' ? 'cabs' : 'autos'} with an operating pin yet.
+                    No matching vehicles with an operating pin yet.
                   </li>
                 ) : (
                   items.map((row) => {

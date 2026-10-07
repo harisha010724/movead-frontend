@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { useAdminCampaigns } from '@/shared/api/hooks';
+import { vehicleTypeLabel } from '@/shared/campaigns/vehicleCatalog';
 import { Page } from '@/shared/layout/Page';
 import {
   Badge,
@@ -428,7 +429,7 @@ function ProductionQueue({
                   <TD>
                     <span className="font-medium text-slate-900">{c.name}</span>
                     <span className="mt-0.5 block text-[12px] text-slate-500">
-                      {c.brandName} · {c.city} · {c.vehicleType === 'AUTO' ? 'Auto' : 'Cab'}
+                      {c.brandName} · {c.city} · {vehicleTypeLabel(c.vehicleType)}
                     </span>
                   </TD>
                   <TD>

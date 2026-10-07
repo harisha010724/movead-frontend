@@ -432,6 +432,7 @@ function respond(overrides: Record<string, unknown> = {}) {
         advertiserCharge: '18.00',
       },
       '/v1/campaigns/cmp_1/visibility': VISIBILITY,
+      '/v1/campaigns/cmp_1/branding-proofs': { items: [] },
       '/v1/dashboard/advertiser': DASHBOARD,
       '/v1/vehicles/live-positions': { items: [], updatedAt: '2026-09-21T10:00:00+05:30' },
       ...overrides,
@@ -515,6 +516,55 @@ describe('campaign detail', () => {
       '/campaigns/cmp_1/trips/drv_suresh',
     );
     expect(screen.getByText(/Showing 1–2 of 2 drivers/)).toBeInTheDocument();
+  });
+
+  it('shows wrap photos the driver sent, without an approval step', async () => {
+    respond({
+      '/v1/campaigns/cmp_1/branding-proofs': {
+        items: [
+          {
+            id: 'prf_1',
+            assignmentId: 'asg_1',
+            campaignId: 'cmp_1',
+            campaignName: 'ABC Summer',
+            registrationNumber: 'KA01AB1234',
+            driverName: 'Ramesh Babu',
+            vehicleCategory: 'CAB',
+            status: 'SUBMITTED',
+            dueAt: '2026-10-08T10:00:00.000Z',
+            requestedAt: '2026-10-07T10:00:00.000Z',
+            submittedAt: '2026-10-07T11:00:00.000Z',
+            reviewedAt: null,
+            rejectionReason: null,
+            photoCount: 1,
+            required: ['FRONT'],
+            uploaded: ['FRONT'],
+            photos: [
+              {
+                id: 'pho_1',
+                angle: 'FRONT',
+                fileName: 'front.png',
+                lat: 12.9716,
+                lon: 77.5946,
+                capturedAt: '2026-10-07T10:55:00.000Z',
+                uploadedAt: '2026-10-07T10:55:10.000Z',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole('heading', { name: 'Wrap photos' })).toBeInTheDocument();
+    expect(await screen.findByText(/KA 01 AB 1234/)).toBeInTheDocument();
+    expect(screen.getByText('Front')).toBeInTheDocument();
+    expect(screen.getByAltText(/Front of KA01AB1234/)).toHaveAttribute(
+      'src',
+      expect.stringContaining('/v1/campaigns/cmp_1/branding-proof-photos/pho_1'),
+    );
+    expect(screen.queryByRole('button', { name: /approve/i })).not.toBeInTheDocument();
   });
 
   it('searches the roster by driver name or vehicle number', async () => {
