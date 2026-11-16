@@ -6,6 +6,7 @@ import { Button } from '@/shared/ui';
 import { FormError } from '@/shared/ui/form';
 import { cityCenter } from './cities';
 import { loadGoogleMaps } from './loadGoogleMaps';
+import { attachPlaceSearch } from './placeSearch';
 import { reverseGeocode } from './reverseGeocode';
 import type { CampaignLocation, ZonePolygons, ZoneTier } from './types';
 import { ZONE_MAP_COLORS } from './zoneColors';
@@ -85,6 +86,7 @@ export function ZoneMapEditor({
   const apiKey = env.googleMapsApiKey;
   const mapEl = useRef<HTMLDivElement>(null);
   const searchEl = useRef<HTMLInputElement>(null);
+  const detachSearchRef = useRef<(() => void) | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
   const vehicleMarkersRef = useRef<Map<string, google.maps.Marker>>(new Map());
@@ -218,28 +220,24 @@ export function ZoneMapEditor({
         setMapReady(true);
 
         if (searchEl.current) {
-          const autocomplete = new google.maps.places.Autocomplete(searchEl.current, {
-            fields: ['place_id', 'formatted_address', 'name', 'geometry'],
-            componentRestrictions: { country: 'in' },
-          });
-          autocomplete.bindTo('bounds', map);
-          autocomplete.addListener('place_changed', () => {
-            const place = autocomplete.getPlace();
-            const loc = place.geometry?.location;
-            if (!loc) return;
-            const next: CampaignLocation = {
-              id: crypto.randomUUID(),
-              placeId: place.place_id ?? '',
-              label: place.formatted_address || place.name || 'Selected location',
-              lat: loc.lat(),
-              lng: loc.lng(),
-              tier: tierRef.current,
-            };
-            onLocationsChangeRef.current([...locationsRef.current, next]);
-            addCorner(loc.lat(), loc.lng());
-            map.panTo(loc);
-            if ((map.getZoom() ?? 12) < 14) map.setZoom(14);
-            if (searchEl.current) searchEl.current.value = '';
+          detachSearchRef.current = attachPlaceSearch({
+            input: searchEl.current,
+            getBias: () => map.getBounds(),
+            onSelect: (place) => {
+              const next: CampaignLocation = {
+                id: crypto.randomUUID(),
+                placeId: place.placeId,
+                label: place.formattedAddress || place.name || 'Selected location',
+                lat: place.lat,
+                lng: place.lng,
+                tier: tierRef.current,
+              };
+              onLocationsChangeRef.current([...locationsRef.current, next]);
+              addCorner(place.lat, place.lng);
+              map.panTo({ lat: place.lat, lng: place.lng });
+              if ((map.getZoom() ?? 12) < 14) map.setZoom(14);
+              if (searchEl.current) searchEl.current.value = '';
+            },
           });
         }
       })
@@ -253,6 +251,8 @@ export function ZoneMapEditor({
 
     return () => {
       cancelled = true;
+      detachSearchRef.current?.();
+      detachSearchRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey]);

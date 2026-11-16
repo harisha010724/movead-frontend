@@ -5,6 +5,7 @@ import { cn } from '@/shared/lib/cn';
 import { FormError } from '@/shared/ui/form';
 import { cityCenter } from './cities';
 import { loadGoogleMaps } from './loadGoogleMaps';
+import { attachPlaceSearch } from './placeSearch';
 
 export interface PickedLocation {
   label: string;
@@ -38,6 +39,7 @@ export function LocationPinPicker({
   const searchEl = useRef<HTMLInputElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
+  const detachSearchRef = useRef<(() => void) | null>(null);
   const valueRef = useRef(value);
   const [mapReady, setMapReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,21 +78,17 @@ export function LocationPinPicker({
         });
 
         if (searchEl.current) {
-          const autocomplete = new google.maps.places.Autocomplete(searchEl.current, {
-            fields: ['formatted_address', 'name', 'geometry'],
-            componentRestrictions: { country: 'in' },
-          });
-          autocomplete.bindTo('bounds', map);
-          autocomplete.addListener('place_changed', () => {
-            const place = autocomplete.getPlace();
-            const loc = place.geometry?.location;
-            if (!loc) return;
-            onChange({
-              label: place.formatted_address || place.name || 'Selected location',
-              lat: loc.lat(),
-              lng: loc.lng(),
-            });
-            if (searchEl.current) searchEl.current.value = '';
+          detachSearchRef.current = attachPlaceSearch({
+            input: searchEl.current,
+            getBias: () => map.getBounds(),
+            onSelect: (place) => {
+              onChange({
+                label: place.formattedAddress || place.name || 'Selected location',
+                lat: place.lat,
+                lng: place.lng,
+              });
+              if (searchEl.current) searchEl.current.value = '';
+            },
           });
         }
 
@@ -109,6 +107,8 @@ export function LocationPinPicker({
 
     return () => {
       cancelled = true;
+      detachSearchRef.current?.();
+      detachSearchRef.current = null;
       markerRef.current?.setMap(null);
       markerRef.current = null;
       mapRef.current = null;

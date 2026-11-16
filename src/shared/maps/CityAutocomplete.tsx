@@ -5,6 +5,7 @@ import { Field, controlClass, controlHeight, controlInvalidClass, describedBy, u
 import { cityFromPlace } from './cityFromPlace';
 import { rememberCityCenter } from './cities';
 import { loadGoogleMaps } from './loadGoogleMaps';
+import { attachPlaceSearch } from './placeSearch';
 
 /**
  * Google Places city search. The advertiser types; they pick one Indian city.
@@ -39,33 +40,32 @@ export function CityAutocomplete({
   useEffect(() => {
     if (!apiKey || !inputRef.current || disabled) return;
 
-    let autocomplete: google.maps.places.Autocomplete | null = null;
+    let detach: (() => void) | null = null;
     let cancelled = false;
 
     void loadGoogleMaps(apiKey).then(() => {
       if (cancelled || !inputRef.current) return;
 
-      autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
-        types: ['(cities)'],
-        fields: ['address_components', 'formatted_address', 'geometry', 'name'],
-        componentRestrictions: { country: 'in' },
-      });
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete?.getPlace();
-        if (!place) return;
-        const city = cityFromPlace(place);
-        if (!city) return;
-        const loc = place.geometry?.location;
-        if (loc) rememberCityCenter(city, loc.lat(), loc.lng());
-        onChangeRef.current(city);
-        if (inputRef.current) inputRef.current.value = city;
+      detach = attachPlaceSearch({
+        input: inputRef.current,
+        includedPrimaryTypes: ['(cities)'],
+        onSelect: (place) => {
+          const city = cityFromPlace({
+            name: place.name,
+            formatted_address: place.formattedAddress,
+            address_components: place.addressComponents,
+          });
+          if (!city) return;
+          rememberCityCenter(city, place.lat, place.lng);
+          onChangeRef.current(city);
+          if (inputRef.current) inputRef.current.value = city;
+        },
       });
     });
 
     return () => {
       cancelled = true;
-      if (autocomplete) google.maps.event.clearInstanceListeners(autocomplete);
+      detach?.();
     };
   }, [apiKey, disabled]);
 
