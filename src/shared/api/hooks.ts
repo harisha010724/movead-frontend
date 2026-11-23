@@ -62,7 +62,7 @@ export function useCampaigns(filters?: { status?: string }) {
   });
 }
 
-export function useAdminCampaigns(filters?: { status?: string }) {
+export function useAdminCampaigns(filters?: { status?: string; pageSize?: number }) {
   return useQuery({
     queryKey: queryKeys.campaigns.admin(filters),
     queryFn: () =>

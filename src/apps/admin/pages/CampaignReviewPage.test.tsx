@@ -86,11 +86,14 @@ async function openAction(name: string, action: string) {
   return screen.findByRole('dialog');
 }
 
-/** The number shown on the production step tile headed `label`. */
-function countFor(label: string): string | undefined {
-  const steps = screen.getByRole('list', { name: 'Production steps' });
-  const tile = within(steps).getByText(label).closest('li');
-  return tile?.querySelector('.numeric:last-of-type')?.textContent ?? undefined;
+/** The tab for a stage. Its name carries the live count, e.g. "On the road (2)". */
+function stageTab(label: string): HTMLElement {
+  return screen.getByRole('tab', { name: new RegExp(`^${label}`) });
+}
+
+/** Radix selects a tab on mousedown, which a bare click does not send. */
+function openStage(label: string): void {
+  fireEvent.mouseDown(stageTab(label), { button: 0 });
 }
 
 beforeEach(() => {
@@ -111,7 +114,7 @@ describe('campaigns already on the road', () => {
     });
     renderPage();
 
-    const running = (await screen.findByRole('table', { name: 'On the road' })) as HTMLElement;
+    const running = await screen.findByRole('table', { name: 'On the road' });
     expect(within(running).getByText('Monsoon Launch')).toBeInTheDocument();
     expect(within(running).getByText('Diwali Push')).toBeInTheDocument();
     expect(within(running).getByText('Paused')).toBeInTheDocument();
@@ -206,10 +209,10 @@ describe('campaigns already on the road', () => {
 });
 
 /**
- * The four tiles were fixed labels that read the same whether thirty campaigns
+ * The stage tabs were fixed labels that read the same whether thirty campaigns
  * were waiting on review or none, which is a diagram rather than a screen.
  */
-describe('the production steps', () => {
+describe('the production stages', () => {
   it('count what is actually in each stage', async () => {
     respondWith({
       PENDING_APPROVAL: [campaign({ id: 'a', status: 'PENDING_APPROVAL' })],
@@ -220,9 +223,101 @@ describe('the production steps', () => {
 
     // Running and paused are one stage: both are campaigns on vehicles.
     await waitFor(() => {
-      expect(countFor('On the road')).toBe('2');
+      expect(stageTab('On the road')).toHaveTextContent('(2)');
     });
-    expect(countFor('Review brief')).toBe('1');
-    expect(countFor('At printer')).toBe('0');
+    expect(stageTab('Awaiting review')).toHaveTextContent('(1)');
+    expect(stageTab('At printer')).toHaveTextContent('(0)');
+  });
+
+  it('opens on the first stage that has work, and then stays where the operator goes', async () => {
+    respondWith({
+      APPROVED: [campaign({ id: 'a', name: 'At The Printer', status: 'APPROVED' })],
+      ACTIVE: [campaign({ id: 'b', name: 'Already Live' })],
+    });
+    renderPage();
+
+    expect(await screen.findByText('At The Printer')).toBeInTheDocument();
+    expect(screen.queryByText('Already Live')).not.toBeInTheDocument();
+
+    openStage('On the road');
+    expect(await screen.findByText('Already Live')).toBeInTheDocument();
+    expect(screen.queryByText('At The Printer')).not.toBeInTheDocument();
+  });
+
+  it('says so when a stage is empty', async () => {
+    respondWith({});
+    renderPage();
+
+    expect(await screen.findByText('Nothing waiting for review')).toBeInTheDocument();
+  });
+});
+
+/**
+ * Search, narrowing and paging work on what the stage loaded, so the operator
+ * can find one campaign among a hundred without scrolling.
+ */
+describe('finding a campaign', () => {
+  const fleet = [
+    campaign({ id: '1', name: 'Alpha Sale', city: 'Bengaluru', vehicleCount: 5 }),
+    campaign({
+      id: '2',
+      name: 'Beta Launch',
+      city: 'Mumbai',
+      vehicleCount: 50,
+      advertiser: { id: 'adv_2', legalName: 'Beta Foods Ltd', brandName: 'BetaFoods' },
+    }),
+    campaign({ id: '3', name: 'Gamma Drive', city: 'Mumbai', vehicleCount: 20 }),
+  ];
+
+  it('narrows the table as the operator types', async () => {
+    respondWith({ ACTIVE: fleet });
+    renderPage();
+    await screen.findByText('Alpha Sale');
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search campaigns' }), {
+      target: { value: 'betafoods' },
+    });
+
+    expect(screen.getByText('Beta Launch')).toBeInTheDocument();
+    expect(screen.queryByText('Alpha Sale')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gamma Drive')).not.toBeInTheDocument();
+  });
+
+  it('offers a way back when nothing matches', async () => {
+    respondWith({ ACTIVE: fleet });
+    renderPage();
+    await screen.findByText('Alpha Sale');
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search campaigns' }), {
+      target: { value: 'zzz' },
+    });
+    expect(await screen.findByText('No campaigns match')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(await screen.findByText('Alpha Sale')).toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search campaigns' })).toHaveValue('');
+  });
+
+  it('pages through a long stage ten at a time', async () => {
+    const many = Array.from({ length: 23 }, (_, index) =>
+      campaign({
+        id: `c${index}`,
+        name: `Campaign ${String(index + 1).padStart(2, '0')}`,
+        // Newest first by default, so give later numbers later dates.
+        submittedAt: `2026-08-${String(index + 1).padStart(2, '0')}T06:00:00.000Z`,
+      }),
+    );
+    respondWith({ ACTIVE: many });
+    renderPage();
+
+    const nav = await screen.findByRole('navigation', { name: 'Pagination' });
+    expect(within(nav).getByText(/of/)).toHaveTextContent('1–10 of 23 campaigns');
+    expect(screen.getByText('Campaign 23')).toBeInTheDocument();
+    expect(screen.queryByText('Campaign 13')).not.toBeInTheDocument();
+
+    fireEvent.click(within(nav).getByRole('button', { name: 'Page 3' }));
+    expect(within(nav).getByText(/of/)).toHaveTextContent('21–23 of 23 campaigns');
+    expect(screen.getByText('Campaign 01')).toBeInTheDocument();
   });
 });
